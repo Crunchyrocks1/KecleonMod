@@ -134,29 +134,19 @@ KecleonMod/
 
 ---
 
-## How to Add a New Version Entry
+## Credits
 
-When a new version is done and committed, add a row to the [Version History](#version-history) table and paste a new `## vX.X.X` section below the last one following this template:
+KecleonMod is built on top of [SilphMod](https://github.com/rootcatch/silphmod) by **rootcatch**, which provides the core IL2CPP injection engine, Frida runtime integration, farming logic, and Android service architecture. Without that foundation this project would not exist.
 
-```markdown
-## vX.X.X — Short Label
+**Third-party components used by the engine:**
+- [Frida](https://frida.re) — dynamic instrumentation toolkit (LGPL-2.0 / wxWindows)
+- [frida-il2cpp-bridge](https://github.com/vfsfitvnm/frida-il2cpp-bridge) — IL2CPP bridge for Frida (MIT)
+- [frida-java-bridge](https://github.com/frida/frida-java-bridge) — Java bridge for Frida (MIT)
+- [buffer](https://github.com/feross/buffer) / [base64-js](https://github.com/beatgammit/base64-js) / [ieee754](https://github.com/feross/ieee754) — utility modules (MIT / BSD)
+- Pokémon artwork from [PokeAPI/sprites](https://github.com/PokeAPI/sprites)
 
-**Date:** YYYY-MM-DD
-**Status:** Working / Testing
-**APK:** filename
-
-### Overview
-What changed and why.
-
-### Changes
-- Item 1
-- Item 2
-
-### Game Target
-| Component | Value |
-...
-```
+See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full license texts.
 
 ---
 
-[MIT](LICENSE) · Based on SilphMod 1.9.3
+[MIT](LICENSE)
