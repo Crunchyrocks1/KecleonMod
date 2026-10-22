@@ -1,6 +1,11 @@
+<div align="center">
+  <img src="docs/kecleon.png" alt="KecleonMod" width="80"/>
+
 # KecleonMod
 
 Private Pokémon GO automation for rooted Android (ARM64) — catches, spins, research, transfers, and item cleanup from one APK. Built on SilphMod 1.9.3.
+
+</div>
 
 ---
 
