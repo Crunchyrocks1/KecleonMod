@@ -31,7 +31,6 @@ import dev.rootcatch.R;
 import dev.rootcatch.automation.AutomationConfig;
 import dev.rootcatch.automation.BerryOptions;
 import dev.rootcatch.automation.SessionLimits;
-import dev.rootcatch.automation.ThrowQuality;
 import dev.rootcatch.automation.PokemonSelection;
 import dev.rootcatch.nativeengine.EnginePolicy;
 import java.util.ArrayList;
@@ -55,11 +54,11 @@ public final class MainActivity extends Activity {
     private SharedPreferences prefs;
     private Switch capture, spin, spinGyms, transfer, clean, useBerries, showIvNames, extendedManualTransfer, fastGiftOpening, hideTrainerName;
     private CheckBox keepShiny, keepHundo, keepNundo, keepDynamax, keepHatched, keepBackground, keepShinyBackground, keepFieldResearch, resolveError12, removeBuddy;
+    private CheckBox throwNormal, throwNice, throwGreat, throwExcellent, curveball, arMode;
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
     private LinearLayout transferOptions, cleanOptions, berryOptions;
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
-    private Button start, export, clearStatistics, items, throwSelector, berrySelector, pokemonSelector;
-    private ThrowQuality throwQuality;
+    private Button start, export, clearStatistics, items, berrySelector, pokemonSelector;
     private String limits;
     private String berryOrder;
     private String onlyCatch;
@@ -73,7 +72,6 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(AutomationConfig.PREFS, MODE_PRIVATE);
-        throwQuality = ThrowQuality.fromSavedValue(prefs.getString("throw_quality", "EXCELLENT"));
         limits = prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS);
         berryOrder = BerryOptions.fromSavedValue(prefs.getString("berry_order", BerryOptions.DEFAULT_ORDER));
         onlyCatch = PokemonSelection.encode(PokemonSelection.parse(prefs.getString(PokemonSelection.KEY, "")));
@@ -174,16 +172,17 @@ public final class MainActivity extends Activity {
             });
         });
 
-        throwSelector = rowButton(features, getString(R.string.throw_quality_selector, throwQuality.label));
-        settings.add(throwSelector);
-        throwSelector.setOnClickListener(view -> {
-            if (FarmService.isBusy() || starting) return;
-            new SettingsDialogs(this).throwsDialog(throwQuality, selected -> {
-                throwQuality = selected;
-                prefs.edit().putString("throw_quality", selected.name()).apply();
-                throwSelector.setText(getString(R.string.throw_quality_selector, selected.label));
-            });
-        });
+        LinearLayout throwOptions = column();
+        throwOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
+        features.addView(throwOptions);
+        throwNormal    = subCheck(throwOptions, "Normal throw",    prefs.getBoolean("throw_normal",    false));
+        throwNice      = subCheck(throwOptions, "Nice throw",      prefs.getBoolean("throw_nice",      false));
+        throwGreat     = subCheck(throwOptions, "Great throw",     prefs.getBoolean("throw_great",     false));
+        throwExcellent = subCheck(throwOptions, "Excellent throw", prefs.getBoolean("throw_excellent", true));
+        curveball      = subCheck(throwOptions, "Curveball",       prefs.getBoolean("curveball",       true));
+        arMode         = subCheck(throwOptions, "AR Mode",         prefs.getBoolean("ar_mode",         false));
+        capture.setOnCheckedChangeListener((v, checked) -> throwOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        throwOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
 
         divider(features);
         useBerries = toggleRow(features, getString(R.string.use_berries), prefs.getBoolean("use_berries", true));
@@ -349,12 +348,19 @@ public final class MainActivity extends Activity {
 
     private void saveSettings() {
         FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), limits);
+        if (capture.isChecked() && !throwNormal.isChecked() && !throwNice.isChecked() && !throwGreat.isChecked() && !throwExcellent.isChecked())
+            throw new IllegalArgumentException("Select at least one throw quality");
         if (capture.isChecked() && useBerries.isChecked() && BerryOptions.parse(berryOrder).isEmpty())
             throw new IllegalArgumentException(getString(R.string.select_berries));
         String name = trainerName.getText().toString().trim();
         if (name.isEmpty()) name = "KecleonBot";
         SharedPreferences.Editor edit = prefs.edit().putString("package", EnginePolicy.GAME).putBoolean("internal_engine", true)
-                .putString("throw_quality", throwQuality.name())
+                .putBoolean("throw_normal", throwNormal.isChecked())
+                .putBoolean("throw_nice", throwNice.isChecked())
+                .putBoolean("throw_great", throwGreat.isChecked())
+                .putBoolean("throw_excellent", throwExcellent.isChecked())
+                .putBoolean("curveball", curveball.isChecked())
+                .putBoolean("ar_mode", arMode.isChecked())
                 .putString(PokemonSelection.KEY, onlyCatch)
                 .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", berryOrder)
                 .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("spin_gyms", spinGyms.isChecked()).putBoolean("clean", clean.isChecked())

@@ -62,7 +62,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   keepShiny:boolean;keepHundo:boolean;keepNundo:boolean;keepDynamax:boolean;keepHatched:boolean;keepBackground:boolean;keepShinyBackground:boolean;keepFieldResearch:boolean;
   maxTransfers:number;sessionId:string;maxDiscardedItems:number;expectedPlayerId:string;
   automaticPreflight:boolean;sessionAccounting:boolean;controlRecovery:boolean;
-  throwQuality:string;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];skipInterruptions:boolean;
+  throwQualities:string[];curveball:boolean;arMode:boolean;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];skipInterruptions:boolean;
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
   fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
@@ -906,7 +906,7 @@ function poll() {
       if(result.class.fullName!=='Holoholo.Rpc.CatchPokemonOutProto')throw Error('Incompatible catch response class');
       const status=number(result.field('Status').value), decision=policy.catchDecision(status,throws,config.maxThrows);
       emit('capture',{id:p.id,status,decision,source:p.captureRequest?.source??(researchTarget?'FIELD_RESEARCH':'WILD'),
-        requestedThrowQuality:config.throwQuality,distanceMeters:p.distanceMeters??null,captureLimitMeters:p.captureLimitMeters??null,
+        requestedThrowQualities:config.throwQualities,distanceMeters:p.distanceMeters??null,captureLimitMeters:p.captureLimitMeters??null,
         elapsedMs:Date.now()-p.started,targetAgeMs:target?Date.now()-targetSelectedAt:null});
       berryCycle?.capture(status);
       let scopeAccepted=false;
@@ -1126,18 +1126,18 @@ function startCapture(counts:Record<string,number>):boolean {
   }
   const item=klass('holo-protos','Holoholo.Rpc.Item').field(ball).value;
   const data=klass('holo-game','Niantic.Holoholo.Encounter.PokeballThrow').method<Il2Cpp.ValueType>('MissedThrow',1).invoke(item);
-  const profile=throwProfile.profile(config.throwQuality);
+  const profile=throwProfile.pick(config.throwQualities);
   data.field('Missed').value=false;data.field('HitBullseye').value=profile.hitBullseye;
-  data.field('Spinning').value=true;data.field('ReticleSize').value=profile.reticleSize;
+  data.field('Spinning').value=config.curveball;data.field('ReticleSize').value=profile.reticleSize;
   const ar=proto('ARPlusEncounterValuesProto');
-  // Conservative AR defaults, not fabricated expert/proximity bonuses.
+  if(config.arMode){try{ar.field('ExpertHandler').value=true;}catch(e){}}
   const id=pokemon.method<UInt64>('get_EncounterId',0).invoke().toString();
   if(!active(true))return true;
   enterStage('capture:TryCapture');
   const captureRequest:CaptureRequest|undefined=config.transferEnabled
     ?transferLedger.issueCapture(id,Date.now(),researchTarget?'FIELD_RESEARCH':'WILD'):undefined;
-  emit('throw_requested',{id,quality:config.throwQuality,grade:profile.grade,reticleSize:profile.reticleSize,
-    hitBullseye:profile.hitBullseye,curveball:true,attempt:throws+1,distanceMeters:researchTarget?null:range,
+  emit('throw_requested',{id,quality:profile.quality,qualities:config.throwQualities,grade:profile.grade,reticleSize:profile.reticleSize,
+    hitBullseye:profile.hitBullseye,curveball:config.curveball,arMode:config.arMode,attempt:throws+1,distanceMeters:researchTarget?null:range,
     captureLimitMeters:researchTarget?null:captureLimitMeters});
   if(captureRequest)emit('capture_request',{...captureRequest,method:'MapPokemon.TryCapture'});
   const promise=object(observed('TryCapture',()=>pokemon.method<Obj>('TryCapture',2).invoke(data,ar)),'MapPokemon.TryCapture');
@@ -1642,7 +1642,11 @@ function init(_stage:string,parameters:any) {
     automaticPreflight:parameters.automaticPreflight===true,
     sessionAccounting:parameters.edition==='ugphone'&&parameters.sessionAccounting===true,
     controlRecovery:parameters.edition==='ugphone'&&parameters.automaticPreflight===true&&parameters.controlRecovery===true,
-    throwQuality:parameters.throwQuality??'GREAT',
+    throwQualities:(Array.isArray(parameters.throwQualities)&&parameters.throwQualities.length
+      ?parameters.throwQualities.filter((q:string)=>throwProfile.PROFILES[q])
+      :[parameters.throwQuality??'EXCELLENT']).filter(Boolean),
+    curveball:parameters.curveball!==false,
+    arMode:parameters.arMode===true,
     useBerries:parameters.useBerries===true,berryOrder:berryPolicy.order(parameters.berryOrder),
     skipInterruptions:parameters.edition==='ugphone'||parameters.skipInterruptions===true,
     fieldResearch:parameters.edition==='ugphone'||parameters.fieldResearch===true,
@@ -1650,7 +1654,8 @@ function init(_stage:string,parameters:any) {
     notificationShadeSupport:parameters.edition==='ugphone'&&parameters.automaticPreflight===true
       &&parameters.controlRecovery===true&&parameters.notificationShadeSupport===true};
   catchFilter = new catchSelection.SpeciesFilter(config.onlyCatch);
-  throwProfile.profile(config.throwQuality);
+  if(config.throwQualities.length===0)throw Error('Select at least one throw quality');
+  config.throwQualities.forEach((q:string)=>throwProfile.profile(q));
   buddyFlow=new buddyRemoval.BuddyRemoval(config.removeBuddy&&!config.encounterOnly);
   if(config.autoCatch&&config.useBerries&&config.berryOrder.length===0)throw Error('Select berries to use');
   if(config.automaticPreflight){

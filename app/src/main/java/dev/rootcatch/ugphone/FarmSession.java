@@ -123,7 +123,7 @@ final class FarmSession implements Runnable {
                     .put("transferPolicy", transfers.proofKey()).put("cleanupLimits", EnginePolicy.limitsKey(config.discardLimits))
                     .put("maxDiscardedItems", config.maxDiscardedItems).put("cleanupTrigger", EnginePolicy.CLEANUP_TRIGGER)
                     .put("actionDelayMs", config.actionDelayMs).put("spinDelayMs", config.spinDelayMs).put("catchDelayMs", config.catchDelayMs).put("maxThrows", config.maxThrows)
-                    .put("throwQuality", config.throwQuality)
+                    .put("throwQualities", new org.json.JSONArray(config.throwQualities)).put("curveball", config.curveball).put("arMode", config.arMode)
                     .put("useBerries", config.useBerries).put("berryOrder", new org.json.JSONArray(config.berryOrder))
                     .put("skipInterruptions", config.skipInterruptions)
                     .put("showIvNames", config.showIvNames).put("extendedManualTransfer", config.extendedManualTransfer)

@@ -21,7 +21,7 @@ static void report(const char *stage, int error, int original, int restored) {
     int saved = errno;
     char buffer[512];
     int size = snprintf(buffer, sizeof(buffer),
-            "{\"event\":\"host_loader\",\"adapter\":\"memfd-readonly-v1\",\"stage\":\"%s\","
+            "{\"event\":\"host_loader\",\"adapter\":\"readonly-lib-v3\",\"stage\":\"%s\","
             "\"errno\":%d,\"originalErrno\":%d,\"restored\":%s,\"pid\":%d,"
             "\"contextCheck\":\"%s\",\"contextCheckErrno\":%d,\"contextProbe\":\"%s\"}\n",
             stage, error, original, restored ? "true" : "false", getpid(), context_check, context_error, context_probe);

@@ -19,7 +19,9 @@ public final class AutomationConfig {
     public final int maxCatches;
     public final int maxSpins;
     public final int maxThrows;
-    public final String throwQuality;
+    public final java.util.List<String> throwQualities;
+    public final boolean curveball;
+    public final boolean arMode;
     public final boolean keepNundo;
     public final boolean useBerries;
     public final java.util.List<String> berryOrder;
@@ -38,7 +40,7 @@ public final class AutomationConfig {
     private AutomationConfig(String gamePackage,
                              boolean autoCatch, java.util.List<Integer> onlyCatch, boolean autoSpin, boolean removeBuddy,
                              boolean cleanBag, boolean spinGyms, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
-                             int maxThrows, String throwQuality, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
+                             int maxThrows, java.util.List<String> throwQualities, boolean curveball, boolean arMode, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
                              boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
         this.gamePackage = gamePackage;
@@ -54,7 +56,9 @@ public final class AutomationConfig {
         this.maxCatches = maxCatches;
         this.maxSpins = maxSpins;
         this.maxThrows = maxThrows;
-        this.throwQuality = throwQuality;
+        this.throwQualities = throwQualities.isEmpty() ? java.util.Collections.singletonList("EXCELLENT") : throwQualities;
+        this.curveball = curveball;
+        this.arMode = arMode;
         this.keepNundo = keepNundo;
         this.useBerries = useBerries;
         this.berryOrder = berryOrder;
@@ -87,7 +91,9 @@ public final class AutomationConfig {
                 SessionLimits.savedLimit(p.getInt("max_catches", SessionLimits.DEFAULT_CATCHES), SessionLimits.DEFAULT_CATCHES),
                 SessionLimits.savedLimit(p.getInt("max_spins", SessionLimits.DEFAULT_SPINS), SessionLimits.DEFAULT_SPINS),
                 0,
-                ThrowQuality.fromSavedValue(p.getString("throw_quality", "EXCELLENT")).name(),
+                buildThrowQualities(p),
+                p.getBoolean("curveball", true),
+                p.getBoolean("ar_mode", false),
                 p.getBoolean("keep_nundo", false),
                 p.getBoolean("use_berries", true),
                 BerryOptions.parse(BerryOptions.fromSavedValue(p.getString("berry_order", BerryOptions.DEFAULT_ORDER))),
@@ -102,6 +108,15 @@ public final class AutomationConfig {
         );
     }
 
+    private static java.util.List<String> buildThrowQualities(SharedPreferences p) {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        if (p.getBoolean("throw_normal", false))    list.add("NORMAL");
+        if (p.getBoolean("throw_nice", false))      list.add("NICE");
+        if (p.getBoolean("throw_great", false))     list.add("GREAT");
+        if (p.getBoolean("throw_excellent", true))  list.add("EXCELLENT");
+        if (list.isEmpty()) list.add("EXCELLENT");
+        return list;
+    }
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }

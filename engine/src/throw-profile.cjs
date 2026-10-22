@@ -9,4 +9,9 @@ function profile(quality = 'GREAT') {
     throw Error('Invalid throw quality');
   return PROFILES[quality];
 }
-module.exports = {PROFILES, profile};
+function pick(qualities) {
+  const valid = Array.isArray(qualities) ? qualities.filter(q => Object.prototype.hasOwnProperty.call(PROFILES, q)) : [];
+  const q = valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : 'EXCELLENT';
+  return {...PROFILES[q], quality: q};
+}
+module.exports = {PROFILES, profile, pick};

@@ -21,8 +21,8 @@ static int agent(int fd, const SilphLoaderOps *ops) {
     int length = ops->path(fd, path, sizeof(path) - 1);
     if (length < 0 || (size_t)length >= sizeof(path) - 1) return 0;
     path[length] = 0;
-    return equal(path, "/memfd:libc-dl-maps.so (deleted)")
-            || equal(path, "memfd:libc-dl-maps.so (deleted)");
+    return equal(path, "/memfd:art-jit-object.so (deleted)")
+            || equal(path, "memfd:art-jit-object.so (deleted)");
 }
 
 SilphLoaderResult silph_loader_prepare(int fd, int original_result, int context_valid, const SilphLoaderOps *ops) {

@@ -53,8 +53,8 @@ val buildLoader = tasks.register("buildLoader") {
 
 val checkNative = tasks.register("checkNativeRuntime") {
     val exactChecks = mapOf(
-        "librootcatch-inject.so" to "1f1626533db197623d206db5b9abbf060eb974940a793b209a07c8cfaed58bc9",
-        "libsilph-spawn.so"      to "4294f41cd33a0bfafe238db85a56a9ea89063f3aa87c63f5c7e7693b287eb645"
+        "librootcatch-inject.so" to "cec700fb7bb3bac270c2f5752ce735b6007338710aa8cb7e997af328d9e311a3",
+        "libsilph-spawn.so"      to "cf1a8058349cf5721b2e5162ddb23a59827c5090c3e4249a1caba220a847e5ee"
     )
     dependsOn(buildLoader)
     inputs.files(exactChecks.keys.map { file("$jniDir/$it") } + listOf(file("$jniDir/libsilph-loader.so")))
