@@ -65,7 +65,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   throwQualities:string[];curveball:boolean;arMode:boolean;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];goldenRazzForShiny:boolean;goldenRazzForHundo:boolean;goldenRazzForGalarBirds:boolean;skipInterruptions:boolean;
   excludePokemon:number[];
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
-  fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string;};
+  autoSendGift:boolean;pinPostcard:boolean;addStickers:boolean;hideTrainerName:boolean;trainerLabel:string;};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
 type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
@@ -1672,7 +1672,8 @@ function init(_stage:string,parameters:any) {
     keepBackground:parameters.keepBackground===true,keepShinyBackground:parameters.keepShinyBackground===true,
     keepFieldResearch:parameters.keepFieldResearch!==false,
     showIvNames:parameters.showIvNames===true,extendedManualTransfer:parameters.extendedManualTransfer===true,
-    fastGiftOpening:parameters.fastGiftOpening===true,hideTrainerName:parameters.hideTrainerName===true,trainerLabel:typeof parameters.trainerLabel==='string'&&parameters.trainerLabel.trim()!==''?parameters.trainerLabel.trim():'KecleonBot',
+    autoSendGift:parameters.autoSendGift===true,pinPostcard:parameters.pinPostcard===true,addStickers:parameters.addStickers===true,
+    hideTrainerName:parameters.hideTrainerName===true,trainerLabel:typeof parameters.trainerLabel==='string'&&parameters.trainerLabel.trim()!==''?parameters.trainerLabel.trim():'KecleonBot',
     removeBuddy:parameters.removeBuddy===true,
     maxTransfers:parameters.maxTransfers??0,sessionId:parameters.sessionId,
     maxDiscardedItems:parameters.maxDiscardedItems??0,expectedPlayerId:parameters.expectedPlayerId??'',
@@ -1822,7 +1823,7 @@ async function setup() {
         attach:(address:NativePointer,callbacks:InvocationListenerCallbacks)=>Interceptor.attach(address,callbacks),
       },config,emit);
       if(stopped&&inventoryAdapter){emit('inventory_tools_cleanup',inventoryAdapter.close());inventoryAdapter=null;return;}
-      if(config.fastGiftOpening||config.hideTrainerName)gameToolsAdapter=gameTools.install({
+      if(config.hideTrainerName)gameToolsAdapter=gameTools.install({
         resolve:klass,object:(address:NativePointer)=>new Il2Cpp.Object(address),
         valid:(value:any)=>value instanceof Il2Cpp.Object&&!value.isNull(),
         alive:(value:Obj)=>klass('UnityEngine.CoreModule','UnityEngine.Object').method<boolean>('op_Implicit',1).invoke(value),

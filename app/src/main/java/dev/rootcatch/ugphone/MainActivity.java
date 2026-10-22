@@ -54,7 +54,8 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<View> settings = new ArrayList<>();
     private SharedPreferences prefs;
-    private Switch capture, spin, spinGyms, transfer, clean, useBerries, showIvNames, extendedManualTransfer, fastGiftOpening, hideTrainerName;
+    private Switch capture, spin, spinGyms, transfer, clean, useBerries, showIvNames, extendedManualTransfer, autoSendGift, hideTrainerName;
+    private CheckBox pinPostcard, addStickers;
     private CheckBox keepShiny, keepHundo, keepNundo, keepDynamax, keepHatched, keepBackground, keepShinyBackground, keepFieldResearch, resolveError12, removeBuddy;
     private CheckBox throwNormal, throwNice, throwGreat, throwExcellent, curveball, arMode;
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
@@ -294,7 +295,14 @@ public final class MainActivity extends Activity {
 
         // ── Extra Settings ────────────────────────────────────────────────────
         LinearLayout extraBody = accordion(page, "Extra Settings", "section_extra");
-        fastGiftOpening = toggleRow(extraBody, "Fast gift opening", prefs.getBoolean("fast_gift_opening", true));
+        autoSendGift = toggleRow(extraBody, "Auto Send Gift", prefs.getBoolean("auto_send_gift", false));
+        LinearLayout giftSubOptions = column();
+        giftSubOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
+        pinPostcard = checkRow(giftSubOptions, "Pin postcard",    prefs.getBoolean("pin_postcard",  false));
+        addStickers = checkRow(giftSubOptions, "Add stickers",    prefs.getBoolean("add_stickers",  false));
+        extraBody.addView(giftSubOptions);
+        autoSendGift.setOnCheckedChangeListener((v, checked) -> giftSubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        giftSubOptions.setVisibility(autoSendGift.isChecked() ? View.VISIBLE : View.GONE);
         divider(extraBody);
         hideTrainerName = toggleRow(extraBody, "Hide trainer name", prefs.getBoolean("hide_trainer_name", true));
         divider(extraBody);
@@ -409,7 +417,9 @@ public final class MainActivity extends Activity {
                 .putBoolean("keep_nundo", keepNundo.isChecked())
                 .putBoolean("show_iv_names", showIvNames.isChecked())
                 .putBoolean("extended_manual_transfer", extendedManualTransfer.isChecked())
-                .putBoolean("fast_gift_opening", fastGiftOpening.isChecked())
+                .putBoolean("auto_send_gift", autoSendGift.isChecked())
+                .putBoolean("pin_postcard",   pinPostcard != null && pinPostcard.isChecked())
+                .putBoolean("add_stickers",   addStickers != null && addStickers.isChecked())
                 .putBoolean("hide_trainer_name", hideTrainerName.isChecked())
                 .putString("trainer_name", name)
                 .putInt("max_transfers", 0).putString("discard_limits", limitsStr)

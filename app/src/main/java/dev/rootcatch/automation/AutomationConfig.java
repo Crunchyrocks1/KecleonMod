@@ -34,7 +34,9 @@ public final class AutomationConfig {
     public final boolean discardUnsupportedResearch;
     public final boolean showIvNames;
     public final boolean extendedManualTransfer;
-    public final boolean fastGiftOpening;
+    public final boolean autoSendGift;
+    public final boolean pinPostcard;
+    public final boolean addStickers;
     public final boolean hideTrainerName;
     public final String trainerLabel;
     public final boolean internalEngine;
@@ -45,7 +47,7 @@ public final class AutomationConfig {
                              boolean cleanBag, boolean spinGyms, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
                              int maxThrows, java.util.List<String> throwQualities, boolean curveball, boolean arMode, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
                              boolean goldenRazzForShiny, boolean goldenRazzForHundo, boolean goldenRazzForGalarBirds,
-                             boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
+                             boolean showIvNames, boolean extendedManualTransfer, boolean autoSendGift, boolean pinPostcard, boolean addStickers, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
         this.gamePackage = gamePackage;
         this.autoCatch = autoCatch;
@@ -75,7 +77,9 @@ public final class AutomationConfig {
         this.discardUnsupportedResearch = true;
         this.showIvNames = showIvNames;
         this.extendedManualTransfer = extendedManualTransfer;
-        this.fastGiftOpening = fastGiftOpening;
+        this.autoSendGift = autoSendGift;
+        this.pinPostcard = pinPostcard;
+        this.addStickers = addStickers;
         this.hideTrainerName = hideTrainerName;
         this.trainerLabel = (trainerLabel != null && !trainerLabel.trim().isEmpty()) ? trainerLabel.trim() : "KecleonBot";
         this.internalEngine = internalEngine;
@@ -111,7 +115,9 @@ public final class AutomationConfig {
                 p.getBoolean("golden_razz_galar_birds", false),
                 p.getBoolean("show_iv_names", true),
                 p.getBoolean("extended_manual_transfer", false),
-                p.getBoolean("fast_gift_opening", true),
+                p.getBoolean("auto_send_gift", false),
+                p.getBoolean("pin_postcard", false),
+                p.getBoolean("add_stickers", false),
                 p.getBoolean("hide_trainer_name", true),
                 p.getString("trainer_name", "KecleonBot"),
                 p.getBoolean("internal_engine", true),
