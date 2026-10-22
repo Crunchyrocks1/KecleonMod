@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
     private Button start, export, clearStatistics, pokemonSelector;
     private CheckBox berryRazz, berryPinap, berryNanab, berryGoldenRazz, berryGoldenPinap;
-    private CheckBox goldenRazzForShiny, goldenRazzForHundo;
+    private CheckBox goldenRazzForShiny, goldenRazzForHundo, goldenRazzForGalarBirds;
     private Button excludeSelector;
     private String excludePokemon = "";
     private final java.util.LinkedHashMap<String, CheckBox> itemChecks = new java.util.LinkedHashMap<>();
@@ -230,8 +230,9 @@ public final class MainActivity extends Activity {
         preConfigLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         preConfigLabel.setPadding(dp(2), dp(6), 0, dp(4));
         preConfigOpts.addView(preConfigLabel);
-        goldenRazzForShiny = subCheck(preConfigOpts, "Golden Razz for shinies", prefs.getBoolean("golden_razz_shiny", false));
-        goldenRazzForHundo = subCheck(preConfigOpts, "Golden Razz for hundos",  prefs.getBoolean("golden_razz_hundo", false));
+        goldenRazzForShiny       = subCheck(preConfigOpts, "Golden Razz for shinies",    prefs.getBoolean("golden_razz_shiny",        false));
+        goldenRazzForHundo       = subCheck(preConfigOpts, "Golden Razz for hundos",     prefs.getBoolean("golden_razz_hundo",        false));
+        goldenRazzForGalarBirds  = subCheck(preConfigOpts, "Golden Razz for Galar Birds (Articuno / Zapdos / Moltres)", prefs.getBoolean("golden_razz_galar_birds", false));
         capture.setOnCheckedChangeListener((v, checked) -> captureSubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         captureSubOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
         divider(catchBody);
@@ -394,8 +395,9 @@ public final class MainActivity extends Activity {
                 .putBoolean("ar_mode", arMode.isChecked())
                 .putString(PokemonSelection.KEY, onlyCatch)
                 .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", buildBerryOrderFromUI())
-                .putBoolean("golden_razz_shiny", goldenRazzForShiny != null && goldenRazzForShiny.isChecked())
-                .putBoolean("golden_razz_hundo", goldenRazzForHundo != null && goldenRazzForHundo.isChecked())
+                .putBoolean("golden_razz_shiny",       goldenRazzForShiny      != null && goldenRazzForShiny.isChecked())
+                .putBoolean("golden_razz_hundo",       goldenRazzForHundo      != null && goldenRazzForHundo.isChecked())
+                .putBoolean("golden_razz_galar_birds", goldenRazzForGalarBirds != null && goldenRazzForGalarBirds.isChecked())
                 .putString("exclude_pokemon", excludePokemon)
                 .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("spin_gyms", spinGyms.isChecked()).putBoolean("clean", clean.isChecked())
                 .putBoolean("resolve_error_12", resolveError12.isChecked())

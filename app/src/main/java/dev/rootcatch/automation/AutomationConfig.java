@@ -28,6 +28,7 @@ public final class AutomationConfig {
     public final java.util.List<String> berryOrder;
     public final boolean goldenRazzForShiny;
     public final boolean goldenRazzForHundo;
+    public final boolean goldenRazzForGalarBirds;
     public final boolean skipInterruptions;
     public final boolean fieldResearch;
     public final boolean discardUnsupportedResearch;
@@ -44,7 +45,7 @@ public final class AutomationConfig {
                              boolean autoCatch, java.util.List<Integer> onlyCatch, java.util.List<Integer> excludePokemon, boolean autoSpin, boolean removeBuddy,
                              boolean cleanBag, boolean spinGyms, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
                              int maxThrows, java.util.List<String> throwQualities, boolean curveball, boolean arMode, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
-                             boolean goldenRazzForShiny, boolean goldenRazzForHundo,
+                             boolean goldenRazzForShiny, boolean goldenRazzForHundo, boolean goldenRazzForGalarBirds,
                              boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
         this.gamePackage = gamePackage;
@@ -69,6 +70,7 @@ public final class AutomationConfig {
         this.berryOrder = berryOrder;
         this.goldenRazzForShiny = goldenRazzForShiny;
         this.goldenRazzForHundo = goldenRazzForHundo;
+        this.goldenRazzForGalarBirds = goldenRazzForGalarBirds;
         this.skipInterruptions = true;
         this.fieldResearch = true;
         this.discardUnsupportedResearch = true;
@@ -107,6 +109,7 @@ public final class AutomationConfig {
                 BerryOptions.parse(BerryOptions.fromSavedValue(p.getString("berry_order", BerryOptions.DEFAULT_ORDER))),
                 p.getBoolean("golden_razz_shiny", false),
                 p.getBoolean("golden_razz_hundo", false),
+                p.getBoolean("golden_razz_galar_birds", false),
                 p.getBoolean("show_iv_names", true),
                 p.getBoolean("extended_manual_transfer", false),
                 p.getBoolean("fast_gift_opening", true),

@@ -62,7 +62,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   keepShiny:boolean;keepHundo:boolean;keepNundo:boolean;keepDynamax:boolean;keepHatched:boolean;keepBackground:boolean;keepShinyBackground:boolean;keepFieldResearch:boolean;
   maxTransfers:number;sessionId:string;maxDiscardedItems:number;expectedPlayerId:string;
   automaticPreflight:boolean;sessionAccounting:boolean;controlRecovery:boolean;
-  throwQualities:string[];curveball:boolean;arMode:boolean;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];goldenRazzForShiny:boolean;goldenRazzForHundo:boolean;skipInterruptions:boolean;
+  throwQualities:string[];curveball:boolean;arMode:boolean;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];goldenRazzForShiny:boolean;goldenRazzForHundo:boolean;goldenRazzForGalarBirds:boolean;skipInterruptions:boolean;
   excludePokemon:number[];
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
   fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string};
@@ -73,7 +73,7 @@ type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'
 let config:Config, initialized=false, stopped=false, ready=false, lastBeat=0, allowed=false;
 let catchFilter = new catchSelection.SpeciesFilter();
 let excludeFilter = new catchSelection.ExclusionFilter();
-let encounterIsShiny=false, encounterIsHundo=false;
+let encounterIsShiny=false, encounterIsHundo=false, encounterIsGalarBird=false;
 let pending:Pending|null=null, target:HeldReference64|null=null, throws=0;
 let berryProfileReady=false, berryCycle:any=null;
 let nextAction=0, nextSpin=0, nextInventory=0, nextReport=0, lastTick=0;
@@ -720,7 +720,7 @@ function active(forceSession=false):boolean {
 }
 function releaseTarget() {
   const reference=target,owned=researchTarget,questId=researchQuestId;
-  target=null;throws=0;targetSelectedAt=0;berryCycle=null;researchTarget=false;researchQuestId='';encounterIsShiny=false;encounterIsHundo=false;
+  target=null;throws=0;targetSelectedAt=0;berryCycle=null;researchTarget=false;researchQuestId='';encounterIsShiny=false;encounterIsHundo=false;encounterIsGalarBird=false;
   try {
     if(owned&&reference) {
       const pokemon=heldObject(reference,'Research target cleanup');
@@ -889,7 +889,7 @@ function poll() {
         throw Error('Incompatible encounter response class; no ball thrown');
       emit('encounter',{id:p.id,distanceMeters:p.distanceMeters??null,captureLimitMeters:p.captureLimitMeters??null,
         elapsedMs:Date.now()-p.started});
-      encounterIsShiny=false;encounterIsHundo=false;
+      encounterIsShiny=false;encounterIsHundo=false;encounterIsGalarBird=false;
       try {
         const pd=result.tryField<Obj>('Pokemon');
         if(pd&&pd.value instanceof Il2Cpp.Object&&!pd.value.isNull()){
@@ -899,8 +899,17 @@ function poll() {
           const s=number(pd.value.field('individualStamina_').value);
           encounterIsHundo=a===15&&d===15&&s===15;
           if(encounterIsShiny||encounterIsHundo)emit('encounter_stats_read',{id:p.id,shiny:encounterIsShiny,hundo:encounterIsHundo,attack:a,defense:d,stamina:s});
+          const GALAR_BIRD_DEX=new Set([144,145,146]);
+          const encDexId=number(pd.value.method<number>('get_PokemonId',0).invoke());
+          if(GALAR_BIRD_DEX.has(encDexId)){
+            try {
+              const disp=pd.value.tryField<Obj>('pokemonDisplay_');
+              if(disp&&disp.value instanceof Il2Cpp.Object&&!disp.value.isNull())
+                encounterIsGalarBird=number(disp.value.tryField('form_')?.value??0)!==0;
+            } catch { encounterIsGalarBird=false; }
+          }
         }
-      } catch { /* IVs not available from this encounter response version */ }
+      } catch { /* IVs/form not available from this encounter response version */ }
       if(berryProfileReady) {
         const initialItem=number(result.field('InitialActiveItem').value);
         berryCycle=new berryPolicy.BerryCycle(initialItem);
@@ -1129,7 +1138,7 @@ function startCapture(counts:Record<string,number>):boolean {
   if(!ball){releaseTarget();emit('no_balls');return false;}
   if(berryProfileReady&&berryCycle) {
     let effectiveBerryOrder=config.berryOrder;
-    const wantGoldenRazz=(config.goldenRazzForShiny&&encounterIsShiny)||(config.goldenRazzForHundo&&encounterIsHundo);
+    const wantGoldenRazz=(config.goldenRazzForShiny&&encounterIsShiny)||(config.goldenRazzForHundo&&encounterIsHundo)||(config.goldenRazzForGalarBirds&&encounterIsGalarBird);
     if(wantGoldenRazz&&config.berryOrder.includes('GoldenRazzBerry'))
       effectiveBerryOrder=['GoldenRazzBerry',...config.berryOrder.filter(b=>b!=='GoldenRazzBerry')];
     const name=berryCycle.choose(effectiveBerryOrder,counts);
@@ -1678,6 +1687,7 @@ function init(_stage:string,parameters:any) {
     useBerries:parameters.useBerries===true,berryOrder:berryPolicy.order(parameters.berryOrder),
     goldenRazzForShiny:parameters.goldenRazzForShiny===true,
     goldenRazzForHundo:parameters.goldenRazzForHundo===true,
+    goldenRazzForGalarBirds:parameters.goldenRazzForGalarBirds===true,
     skipInterruptions:parameters.edition==='ugphone'||parameters.skipInterruptions===true,
     fieldResearch:parameters.edition==='ugphone'||parameters.fieldResearch===true,
     discardUnsupportedResearch:parameters.edition==='ugphone'||parameters.discardUnsupportedResearch===true,
