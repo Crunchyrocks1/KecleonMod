@@ -21,7 +21,7 @@ static void report(const char *stage, int error, int original, int restored) {
     int saved = errno;
     char buffer[512];
     int size = snprintf(buffer, sizeof(buffer),
-            "{\"event\":\"host_loader\",\"adapter\":\"memfd-readonly-v1\",\"stage\":\"%s\","
+            "{\"event\":\"host_loader\",\"adapter\":\"apk-context-v2\",\"stage\":\"%s\","
             "\"errno\":%d,\"originalErrno\":%d,\"restored\":%s,\"pid\":%d,"
             "\"contextCheck\":\"%s\",\"contextCheckErrno\":%d,\"contextProbe\":\"%s\"}\n",
             stage, error, original, restored ? "true" : "false", getpid(), context_check, context_error, context_probe);
@@ -33,7 +33,7 @@ static void report(const char *stage, int error, int original, int restored) {
 }
 
 static void check_context(void) {
-    const char *descriptor = getenv("SYSTEM_CONTEXT_FD");
+    const char *descriptor = getenv("SILPH_LOADER_CONTEXT_FD");
     if (descriptor == NULL || strcmp(descriptor, "9") != 0) return;
     char endpoint[128];
     struct statfs fs;
@@ -58,7 +58,7 @@ static void check_context(void) {
 }
 
 __attribute__((constructor)) static void prepare(void) {
-    const char *scope = getenv("PROC_LOADER_CTX");
+    const char *scope = getenv("RUNTIME_LOADER_CTX");
     char executable[4096];
     ssize_t length = readlink("/proc/self/exe", executable, sizeof(executable) - 1);
     if (length > 0 && (size_t)length < sizeof(executable) - 1) executable[length] = 0;
@@ -70,8 +70,8 @@ __attribute__((constructor)) static void prepare(void) {
     set_attribute = (SetAttribute)dlsym(RTLD_NEXT, "fsetxattr");
     if (enabled) check_context();
     unsetenv("LD_PRELOAD");
-    unsetenv("PROC_LOADER_CTX");
-    unsetenv("SYSTEM_CONTEXT_FD");
+    unsetenv("RUNTIME_LOADER_CTX");
+    unsetenv("SILPH_LOADER_CONTEXT_FD");
     if (enabled) report(set_attribute != NULL ? "ready" : "resolver_failed", set_attribute != NULL ? 0 : ENOSYS, 0, 0);
 }
 

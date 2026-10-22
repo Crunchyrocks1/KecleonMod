@@ -1,7 +1,7 @@
 package dev.rootcatch.nativeengine;
 
 public final class LoaderState {
-    public static final String ADAPTER = "memfd-readonly-v1";
+    public static final String ADAPTER = "apk-context-v2";
     private boolean ready, adapted;
     private String stage = "not_started";
     private int error, originalError;

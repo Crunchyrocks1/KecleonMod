@@ -7,6 +7,7 @@ import java.util.Map;
 final class FarmPolicy {
     static final String BUILD = dev.rootcatch.BuildConfig.VERSION_NAME;
     static final String EXPECTED_AGENT_SHA = AgentBuild.SHA256;
+    static final String AGENT_PATH = AgentBuild.PATH;
     static final long STARTUP_LIMIT_MS = 180_000L;
     private FarmPolicy() { }
     static int integer(String text, int min, int max, String label) {

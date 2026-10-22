@@ -156,7 +156,7 @@ final class FarmSession implements Runnable {
             PackageInfo game = context.getPackageManager().getPackageInfo(EnginePolicy.GAME, 0);
             if (!EnginePolicy.supports(config.gamePackage, game.versionName, game.getLongVersionCode()))
                 throw new IllegalStateException("Supported version: GO " + EnginePolicy.VERSION + " / " + EnginePolicy.VERSION_CODE);
-            try (InputStream asset = context.getAssets().open("engine/agent.js")) {
+            try (InputStream asset = context.getAssets().open(FarmPolicy.AGENT_PATH)) {
                 if (!FarmPolicy.EXPECTED_AGENT_SHA.equals(hash(asset))) throw new IllegalStateException("Engine integrity check failed");
             }
             connection = compatibility.prepare(context, root, resolveError12, () -> userCancelled,
