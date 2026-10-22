@@ -10,4 +10,9 @@ class SpeciesFilter {
   allows(id) { return !this.active || Number.isInteger(id) && this.ids.has(id); }
   allowsPokemon(readId, source = 'WILD') { return source === 'FIELD_RESEARCH' || !this.active || this.allows(readId()); }
 }
-module.exports = {MAX_DEX, read, SpeciesFilter};
+class ExclusionFilter {
+  constructor(value) { this.ids = new Set(read(value)); this.active = this.ids.size > 0; }
+  allows(id) { return !this.active || !Number.isInteger(id) || !this.ids.has(id); }
+  allowsPokemon(readId, source = 'WILD') { return source === 'FIELD_RESEARCH' || !this.active || this.allows(readId()); }
+}
+module.exports = {MAX_DEX, read, SpeciesFilter, ExclusionFilter};

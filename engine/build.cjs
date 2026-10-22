@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'app/build/generated/engine');
-const asset = path.join(output, 'assets/lib/service.bin');
+const asset = path.join(output, 'assets/lib/data.bin');
 esbuild.buildSync({
   absWorkingDir: __dirname, entryPoints: ['src/silph-entry.ts'], bundle: true, preserveSymlinks: true,
   format: 'iife', platform: 'neutral', mainFields: ['main', 'module'],

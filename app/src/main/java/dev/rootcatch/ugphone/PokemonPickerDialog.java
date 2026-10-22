@@ -66,6 +66,10 @@ final class PokemonPickerDialog {
     PokemonPickerDialog(Activity activity, String current) {
         this.activity = activity; selected = new TreeSet<>(PokemonSelection.parse(current));
     }
+    private String customTitle;
+    PokemonPickerDialog(Activity activity, String current, String title) {
+        this.activity = activity; selected = new TreeSet<>(PokemonSelection.parse(current)); customTitle = title;
+    }
     void show(Consumer<String> save) {
         final List<PokemonCatalog.Entry> catalog;
         try { catalog = PokemonCatalog.load(activity); }
@@ -73,7 +77,7 @@ final class PokemonPickerDialog {
         dialog = new Dialog(activity); dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout page = column(); page.setPadding(dp(18), dp(20), dp(18), dp(16));
         page.setBackground(shape(BACKGROUND, BORDER, 22));
-        TextView title = text(activity.getString(R.string.only_catch), 22, TEXT); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        TextView title = text(customTitle != null ? customTitle : activity.getString(R.string.only_catch), 22, TEXT); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         page.addView(title);
         summary = text("", 13, MUTED); summary.setPadding(0, dp(7), 0, dp(16)); page.addView(summary);
         EditText search = new EditText(activity); search.setSingleLine(true);

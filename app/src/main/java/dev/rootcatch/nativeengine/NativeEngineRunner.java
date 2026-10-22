@@ -193,8 +193,8 @@ public final class NativeEngineRunner implements Runnable {
             throw new IllegalStateException("Injector integrity check failed; reinstall the APK");
         File directory = new File(context.getFilesDir(), "lib");
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Could not prepare agent");
-        File agent = new File(directory, "service.bin");
-        try (InputStream input = context.getAssets().open("lib/service.bin"); FileOutputStream output = new FileOutputStream(agent)) {
+        File agent = new File(directory, "data.bin");
+        try (InputStream input = context.getAssets().open("lib/data.bin"); FileOutputStream output = new FileOutputStream(agent)) {
             byte[] buffer = new byte[32768]; int count;
             while ((count = input.read(buffer)) != -1) {
                 if (stopping) throw new IllegalStateException("Startup stopped");
@@ -312,7 +312,7 @@ public final class NativeEngineRunner implements Runnable {
             try { command(new JSONObject().put("type", "stop").put("reason", reason)); }
             catch (Exception ignored) { }
             closeControl();
-        }, "work-thread-2");
+        }, "gc-worker-1");
         stopper.setDaemon(true); stopper.start();
     }
 
@@ -345,6 +345,7 @@ public final class NativeEngineRunner implements Runnable {
                     .put("mode", "FARMER")
                     .put("version", EnginePolicy.VERSION).put("autoCatch", config.autoCatch)
                     .put("onlyCatch", new org.json.JSONArray(config.onlyCatch))
+                    .put("excludePokemon", new org.json.JSONArray(config.excludePokemon))
                     .put("emptyMapRecoveryEnabled", emptyMapRecoveryEnabled)
                     .put("autoSpin", config.autoSpin).put("spinGyms", config.spinGyms).put("cleanBag", config.cleanBag)
                     .put("removeBuddy", config.removeBuddy && !buddyRemovalHandled)
@@ -353,6 +354,7 @@ public final class NativeEngineRunner implements Runnable {
                     .put("curveball", config.curveball).put("arMode", config.arMode)
                     .put("notificationShadeSupport", true)
                     .put("useBerries", config.useBerries).put("berryOrder", new org.json.JSONArray(config.berryOrder))
+                    .put("goldenRazzForShiny", config.goldenRazzForShiny).put("goldenRazzForHundo", config.goldenRazzForHundo)
                     .put("skipInterruptions", config.skipInterruptions)
                     .put("showIvNames", config.showIvNames).put("extendedManualTransfer", config.extendedManualTransfer)
                     .put("fastGiftOpening", config.fastGiftOpening).put("hideTrainerName", config.hideTrainerName).put("trainerLabel", config.trainerLabel)
@@ -437,7 +439,7 @@ public final class NativeEngineRunner implements Runnable {
             process = local;
             processStarted = true; transportClosed = false;
             control = new BufferedWriter(new OutputStreamWriter(local.getOutputStream(), StandardCharsets.UTF_8));
-            Thread reader = new Thread(() -> readLines(local), "async-reader-2");
+            Thread reader = new Thread(() -> readLines(local), "dex-reader-2");
             outputReader = reader;
             reader.setDaemon(true); reader.start();
             ControlPulse pulses = new ControlPulse(SystemClock::elapsedRealtime, pulse ->

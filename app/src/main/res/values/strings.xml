@@ -58,4 +58,10 @@
         <item quantity="one">Only catch · %1$d selected ▾</item>
         <item quantity="other">Only catch · %1$d selected ▾</item>
     </plurals>
+    <string name="exclude_pokemon">Exclude Pokémon</string>
+    <string name="exclude_pokemon_none">Exclude Pokémon · None ▾</string>
+    <plurals name="exclude_pokemon_count">
+        <item quantity="one">Exclude · %1$d Pokémon ▾</item>
+        <item quantity="other">Exclude · %1$d Pokémon ▾</item>
+    </plurals>
 </resources>

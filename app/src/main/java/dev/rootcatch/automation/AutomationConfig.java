@@ -9,6 +9,7 @@ public final class AutomationConfig {
     public final String gamePackage;
     public final boolean autoCatch;
     public final java.util.List<Integer> onlyCatch;
+    public final java.util.List<Integer> excludePokemon;
     public final boolean autoSpin;
     public final boolean spinGyms;
     public final boolean removeBuddy;
@@ -25,6 +26,8 @@ public final class AutomationConfig {
     public final boolean keepNundo;
     public final boolean useBerries;
     public final java.util.List<String> berryOrder;
+    public final boolean goldenRazzForShiny;
+    public final boolean goldenRazzForHundo;
     public final boolean skipInterruptions;
     public final boolean fieldResearch;
     public final boolean discardUnsupportedResearch;
@@ -38,14 +41,16 @@ public final class AutomationConfig {
     public final int maxDiscardedItems;
 
     private AutomationConfig(String gamePackage,
-                             boolean autoCatch, java.util.List<Integer> onlyCatch, boolean autoSpin, boolean removeBuddy,
+                             boolean autoCatch, java.util.List<Integer> onlyCatch, java.util.List<Integer> excludePokemon, boolean autoSpin, boolean removeBuddy,
                              boolean cleanBag, boolean spinGyms, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
                              int maxThrows, java.util.List<String> throwQualities, boolean curveball, boolean arMode, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
+                             boolean goldenRazzForShiny, boolean goldenRazzForHundo,
                              boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
         this.gamePackage = gamePackage;
         this.autoCatch = autoCatch;
         this.onlyCatch = onlyCatch;
+        this.excludePokemon = excludePokemon;
         this.autoSpin = autoSpin;
         this.removeBuddy = removeBuddy;
         this.cleanBag = cleanBag;
@@ -62,6 +67,8 @@ public final class AutomationConfig {
         this.keepNundo = keepNundo;
         this.useBerries = useBerries;
         this.berryOrder = berryOrder;
+        this.goldenRazzForShiny = goldenRazzForShiny;
+        this.goldenRazzForHundo = goldenRazzForHundo;
         this.skipInterruptions = true;
         this.fieldResearch = true;
         this.discardUnsupportedResearch = true;
@@ -81,6 +88,7 @@ public final class AutomationConfig {
                 p.getString("package", "com.nianticlabs.pokemongo"),
                 p.getBoolean("catch", true),
                 PokemonSelection.parse(p.getString(PokemonSelection.KEY, "")),
+                PokemonSelection.parse(p.getString("exclude_pokemon", "")),
                 p.getBoolean("spin", true),
                 p.getBoolean("remove_buddy", false),
                 p.getBoolean("clean", false),
@@ -97,6 +105,8 @@ public final class AutomationConfig {
                 p.getBoolean("keep_nundo", false),
                 p.getBoolean("use_berries", true),
                 BerryOptions.parse(BerryOptions.fromSavedValue(p.getString("berry_order", BerryOptions.DEFAULT_ORDER))),
+                p.getBoolean("golden_razz_shiny", false),
+                p.getBoolean("golden_razz_hundo", false),
                 p.getBoolean("show_iv_names", true),
                 p.getBoolean("extended_manual_transfer", false),
                 p.getBoolean("fast_gift_opening", true),

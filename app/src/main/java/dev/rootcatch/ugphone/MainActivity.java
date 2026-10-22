@@ -63,6 +63,9 @@ public final class MainActivity extends Activity {
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
     private Button start, export, clearStatistics, pokemonSelector;
     private CheckBox berryRazz, berryPinap, berryNanab, berryGoldenRazz, berryGoldenPinap;
+    private CheckBox goldenRazzForShiny, goldenRazzForHundo;
+    private Button excludeSelector;
+    private String excludePokemon = "";
     private final java.util.LinkedHashMap<String, CheckBox> itemChecks = new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String, EditText> itemAmounts = new java.util.LinkedHashMap<>();
     private String berryOrder;
@@ -79,6 +82,7 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences(AutomationConfig.PREFS, MODE_PRIVATE);
         berryOrder = BerryOptions.fromSavedValue(prefs.getString("berry_order", BerryOptions.DEFAULT_ORDER));
         onlyCatch = PokemonSelection.encode(PokemonSelection.parse(prefs.getString(PokemonSelection.KEY, "")));
+        excludePokemon = PokemonSelection.encode(PokemonSelection.parse(prefs.getString("exclude_pokemon", "")));
         FarmService.restoreLast(this);
 
         LinearLayout screen = column();
@@ -185,6 +189,17 @@ public final class MainActivity extends Activity {
                 updatePokemonLabel();
             });
         });
+        excludeSelector = rowButton(captureSubOptions, "");
+        settings.add(excludeSelector);
+        updateExcludeLabel();
+        excludeSelector.setOnClickListener(view -> {
+            if (FarmService.isBusy() || starting) return;
+            new PokemonPickerDialog(this, excludePokemon, getString(R.string.exclude_pokemon)).show(selected -> {
+                excludePokemon = selected;
+                prefs.edit().putString("exclude_pokemon", selected).apply();
+                updateExcludeLabel();
+            });
+        });
         LinearLayout throwOptions = column();
         throwOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
         captureSubOptions.addView(throwOptions);
@@ -204,6 +219,13 @@ public final class MainActivity extends Activity {
         berryPinap       = subCheck(berrySubOptions, "Pinap Berry",        savedBerries.contains("PinapBerry"));
         berryNanab       = subCheck(berrySubOptions, "Nanab Berry",        savedBerries.contains("NanabBerry"));
         berryGoldenRazz  = subCheck(berrySubOptions, "Golden Razz Berry",  savedBerries.contains("GoldenRazzBerry"));
+        LinearLayout goldenRazzOpts = column();
+        goldenRazzOpts.setPadding(dp(28), 0, 0, 0);
+        berrySubOptions.addView(goldenRazzOpts);
+        goldenRazzForShiny = subCheck(goldenRazzOpts, "Use for shinies", prefs.getBoolean("golden_razz_shiny", false));
+        goldenRazzForHundo = subCheck(goldenRazzOpts, "Use for hundos",  prefs.getBoolean("golden_razz_hundo", false));
+        berryGoldenRazz.setOnCheckedChangeListener((v, checked) -> goldenRazzOpts.setVisibility(checked ? View.VISIBLE : View.GONE));
+        goldenRazzOpts.setVisibility(berryGoldenRazz.isChecked() ? View.VISIBLE : View.GONE);
         berryGoldenPinap = subCheck(berrySubOptions, "Golden Pinap Berry", savedBerries.contains("GoldenPinapBerry"));
         useBerries.setOnCheckedChangeListener((view, checked) -> berrySubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         berrySubOptions.setVisibility(useBerries.isChecked() ? View.VISIBLE : View.GONE);
@@ -369,6 +391,9 @@ public final class MainActivity extends Activity {
                 .putBoolean("ar_mode", arMode.isChecked())
                 .putString(PokemonSelection.KEY, onlyCatch)
                 .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", buildBerryOrderFromUI())
+                .putBoolean("golden_razz_shiny", goldenRazzForShiny != null && goldenRazzForShiny.isChecked())
+                .putBoolean("golden_razz_hundo", goldenRazzForHundo != null && goldenRazzForHundo.isChecked())
+                .putString("exclude_pokemon", excludePokemon)
                 .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("spin_gyms", spinGyms.isChecked()).putBoolean("clean", clean.isChecked())
                 .putBoolean("resolve_error_12", resolveError12.isChecked())
                 .putBoolean("remove_buddy", removeBuddy.isChecked())
@@ -401,6 +426,12 @@ public final class MainActivity extends Activity {
         int count = PokemonSelection.parse(onlyCatch).size();
         pokemonSelector.setText(count == 0 ? getString(R.string.only_catch_all)
                 : getResources().getQuantityString(R.plurals.only_catch_count, count, count));
+    }
+
+    private void updateExcludeLabel() {
+        int count = PokemonSelection.parse(excludePokemon).size();
+        excludeSelector.setText(count == 0 ? getString(R.string.exclude_pokemon_none)
+                : getResources().getQuantityString(R.plurals.exclude_pokemon_count, count, count));
     }
 
     private static int read(EditText input, int min, int max, String label) {
