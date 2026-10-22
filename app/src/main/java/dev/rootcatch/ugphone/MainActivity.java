@@ -152,16 +152,13 @@ public final class MainActivity extends Activity {
             if (!starting && FarmService.clearStatistics(this)) renderState();
         });
 
-        // ── Features ──────────────────────────────────────────────────────────
-        space(page, 22);
-        sectionLabel(page, "FEATURES");
-        space(page, 8);
-        LinearLayout features = card();
-        page.addView(features);
+        // ── Accordion sections ────────────────────────────────────────────────
+        space(page, 16);
 
-        capture = toggleRow(features, "Catches", prefs.getBoolean("catch", true));
-
-        pokemonSelector = rowButton(features, "");
+        // ── Catch Settings ────────────────────────────────────────────────────
+        LinearLayout catchBody = accordion(page, "Catch Settings", "section_catch");
+        capture = toggleRow(catchBody, "Catches", prefs.getBoolean("catch", true));
+        pokemonSelector = rowButton(catchBody, "");
         settings.add(pokemonSelector);
         updatePokemonLabel();
         pokemonSelector.setOnClickListener(view -> {
@@ -172,23 +169,67 @@ public final class MainActivity extends Activity {
                 updatePokemonLabel();
             });
         });
-
         LinearLayout throwOptions = column();
         throwOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
-        features.addView(throwOptions);
+        catchBody.addView(throwOptions);
         throwNormal    = subCheck(throwOptions, "Normal throw",    prefs.getBoolean("throw_normal",    false));
         throwNice      = subCheck(throwOptions, "Nice throw",      prefs.getBoolean("throw_nice",      false));
         throwGreat     = subCheck(throwOptions, "Great throw",     prefs.getBoolean("throw_great",     false));
         throwExcellent = subCheck(throwOptions, "Excellent throw", prefs.getBoolean("throw_excellent", true));
         curveball      = subCheck(throwOptions, "Curveball",       prefs.getBoolean("curveball",       true));
         arMode         = subCheck(throwOptions, "AR Mode",         prefs.getBoolean("ar_mode",         false));
-        capture.setOnCheckedChangeListener((v, checked) -> throwOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        capture.setOnCheckedChangeListener((v, checked) -> {
+            pokemonSelector.setVisibility(checked ? View.VISIBLE : View.GONE);
+            throwOptions.setVisibility(checked ? View.VISIBLE : View.GONE);
+        });
+        pokemonSelector.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
         throwOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
+        divider(catchBody);
+        catchDelay = numericRow(catchBody, "Catch delay (ms)",
+                Math.max(100, Math.min(3000, prefs.getInt("catch_delay", 150))));
+        divider(catchBody);
+        maxCatches = numericRow(catchBody, getString(R.string.maximum_catches),
+                SessionLimits.savedLimit(prefs.getInt("max_catches", SessionLimits.DEFAULT_CATCHES), SessionLimits.DEFAULT_CATCHES));
 
-        divider(features);
-        useBerries = toggleRow(features, getString(R.string.use_berries), prefs.getBoolean("use_berries", true));
+        space(page, 8);
+
+        // ── Spin Settings ─────────────────────────────────────────────────────
+        LinearLayout spinBody = accordion(page, "Spin Settings", "section_spin");
+        spin     = toggleRow(spinBody, "Spin PokéStops", prefs.getBoolean("spin",      true));
+        spinGyms = toggleRow(spinBody, "Spin Gyms",      prefs.getBoolean("spin_gyms", false));
+        divider(spinBody);
+        spinDelay = numericRow(spinBody, "Spin delay (ms)",
+                Math.max(100, Math.min(3000, prefs.getInt("spin_delay", 150))));
+        divider(spinBody);
+        maxSpins = numericRow(spinBody, getString(R.string.maximum_spins),
+                SessionLimits.savedLimit(prefs.getInt("max_spins", SessionLimits.DEFAULT_SPINS), SessionLimits.DEFAULT_SPINS));
+
+        space(page, 8);
+
+        // ── Transfer Settings ─────────────────────────────────────────────────
+        LinearLayout transferBody = accordion(page, "Transfer Settings", "section_transfer");
+        transfer = toggleRow(transferBody, "Transfer new catches", prefs.getBoolean("transfer", false));
+        transferOptions = column();
+        transferOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
+        transferBody.addView(transferOptions);
+        keepShiny           = subCheck(transferOptions, "Keep shiny",                     prefs.getBoolean("keep_shiny",            true));
+        keepHundo           = subCheck(transferOptions, "Keep 15/15/15",                  prefs.getBoolean("keep_hundo",            true));
+        keepDynamax         = subCheck(transferOptions, "Keep Dynamax",                   prefs.getBoolean("keep_dynamax",          true));
+        keepHatched         = subCheck(transferOptions, "Keep hatched",                   prefs.getBoolean("keep_hatched",          true));
+        keepBackground      = subCheck(transferOptions, "Keep background",                prefs.getBoolean("keep_background",       true));
+        keepShinyBackground = subCheck(transferOptions, "Keep shiny + background",        prefs.getBoolean("keep_shiny_background", false));
+        keepFieldResearch   = subCheck(transferOptions, "Keep field research encounters", prefs.getBoolean("keep_field_research",   true));
+        keepNundo           = subCheck(transferOptions, "Keep 0/0/0 (nundo)",             prefs.getBoolean("keep_nundo",            false));
+        transfer.setOnCheckedChangeListener((v, checked) -> transferOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        transferOptions.setVisibility(transfer.isChecked() ? View.VISIBLE : View.GONE);
+
+        space(page, 8);
+
+        // ── Inventory Settings ────────────────────────────────────────────────
+        LinearLayout inventoryBody = accordion(page, "Inventory Settings", "section_inventory");
+        useBerries = toggleRow(inventoryBody, getString(R.string.use_berries), prefs.getBoolean("use_berries", true));
         berryOptions = column();
-        features.addView(berryOptions);
+        inventoryBody.addView(berryOptions);
         berrySelector = rowButton(berryOptions, "");
         settings.add(berrySelector);
         updateBerryLabel();
@@ -202,81 +243,32 @@ public final class MainActivity extends Activity {
         });
         useBerries.setOnCheckedChangeListener((view, checked) -> berryOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         berryOptions.setVisibility(useBerries.isChecked() ? View.VISIBLE : View.GONE);
-
-        divider(features);
-        spin = toggleRow(features, "Spin PokéStops", prefs.getBoolean("spin", true));
-        spinGyms = toggleRow(features, "Spin Gyms", prefs.getBoolean("spin_gyms", false));
-
-        divider(features);
-        transfer = toggleRow(features, "Transfer new catches", prefs.getBoolean("transfer", false));
-        transferOptions = column();
-        transferOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
-        features.addView(transferOptions);
-        keepShiny           = subCheck(transferOptions, "Keep shiny",                     prefs.getBoolean("keep_shiny", true));
-        keepHundo           = subCheck(transferOptions, "Keep 15/15/15",                  prefs.getBoolean("keep_hundo", true));
-        keepDynamax         = subCheck(transferOptions, "Keep Dynamax",                   prefs.getBoolean("keep_dynamax", true));
-        keepHatched         = subCheck(transferOptions, "Keep hatched",                   prefs.getBoolean("keep_hatched", true));
-        keepBackground      = subCheck(transferOptions, "Keep background",                prefs.getBoolean("keep_background", true));
-        keepShinyBackground = subCheck(transferOptions, "Keep shiny + background",        prefs.getBoolean("keep_shiny_background", false));
-        keepFieldResearch   = subCheck(transferOptions, "Keep field research encounters", prefs.getBoolean("keep_field_research", true));
-        keepNundo           = subCheck(transferOptions, "Keep 0/0/0 (nundo)",               prefs.getBoolean("keep_nundo", false));
-
-        divider(features);
-        clean = toggleRow(features, "Clean item bag", prefs.getBoolean("clean", false));
+        divider(inventoryBody);
+        showIvNames            = toggleRow(inventoryBody, "Show IV names",            prefs.getBoolean("show_iv_names",            true));
+        divider(inventoryBody);
+        extendedManualTransfer = toggleRow(inventoryBody, "Extended manual transfer", prefs.getBoolean("extended_manual_transfer", false));
+        divider(inventoryBody);
+        clean = toggleRow(inventoryBody, "Clean item bag", prefs.getBoolean("clean", false));
         cleanOptions = column();
         cleanOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
-        features.addView(cleanOptions);
+        inventoryBody.addView(cleanOptions);
         buildItemRows(cleanOptions, EnginePolicy.parseLimits(prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS)));
-
-        transfer.setOnCheckedChangeListener((view, selected) -> transferOptions.setVisibility(selected ? View.VISIBLE : View.GONE));
-        clean.setOnCheckedChangeListener((view, selected) -> cleanOptions.setVisibility(selected ? View.VISIBLE : View.GONE));
-        transferOptions.setVisibility(transfer.isChecked() ? View.VISIBLE : View.GONE);
+        clean.setOnCheckedChangeListener((view, checked) -> cleanOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         cleanOptions.setVisibility(clean.isChecked() ? View.VISIBLE : View.GONE);
 
-        // ── Inventory tools ───────────────────────────────────────────────────
-        space(page, 22);
-        sectionLabel(page, "INVENTORY TOOLS");
         space(page, 8);
-        LinearLayout inventoryTools = card();
-        page.addView(inventoryTools);
-        showIvNames            = toggleRow(inventoryTools, "Show IV names",            prefs.getBoolean("show_iv_names", true));
-        divider(inventoryTools);
-        extendedManualTransfer = toggleRow(inventoryTools, "Extended manual transfer", prefs.getBoolean("extended_manual_transfer", false));
 
-        // ── Game tools ────────────────────────────────────────────────────────
-        space(page, 22);
-        sectionLabel(page, "GAME TOOLS");
-        space(page, 8);
-        LinearLayout gameTools = card();
-        page.addView(gameTools);
-        fastGiftOpening = toggleRow(gameTools, "Fast gift opening", prefs.getBoolean("fast_gift_opening", true));
-        divider(gameTools);
-        hideTrainerName = toggleRow(gameTools, "Hide trainer name", prefs.getBoolean("hide_trainer_name", true));
-
-        // ── Settings ─────────────────────────────────────────────────────────
-        space(page, 22);
-        sectionLabel(page, "SETTINGS");
-        space(page, 8);
-        LinearLayout settingsCard = card();
-        page.addView(settingsCard);
-
-        resolveError12 = checkRow(settingsCard, "Fix error 12", prefs.getBoolean("resolve_error_12", false));
-        divider(settingsCard);
-        removeBuddy = checkRow(settingsCard, getString(R.string.remove_buddy), prefs.getBoolean("remove_buddy", false));
-        divider(settingsCard);
-        trainerName = textRow(settingsCard, "Trainer name", prefs.getString("trainer_name", "KecleonBot"));
-        divider(settingsCard);
-        maxCatches = numericRow(settingsCard, getString(R.string.maximum_catches),
-                SessionLimits.savedLimit(prefs.getInt("max_catches", SessionLimits.DEFAULT_CATCHES), SessionLimits.DEFAULT_CATCHES));
-        divider(settingsCard);
-        maxSpins = numericRow(settingsCard, getString(R.string.maximum_spins),
-                SessionLimits.savedLimit(prefs.getInt("max_spins", SessionLimits.DEFAULT_SPINS), SessionLimits.DEFAULT_SPINS));
-        divider(settingsCard);
-        spinDelay = numericRow(settingsCard, "Spin delay (ms)",
-                Math.max(100, Math.min(3000, prefs.getInt("spin_delay", 150))));
-        divider(settingsCard);
-        catchDelay = numericRow(settingsCard, "Catch delay (ms)",
-                Math.max(100, Math.min(3000, prefs.getInt("catch_delay", 150))));
+        // ── Extra Settings ────────────────────────────────────────────────────
+        LinearLayout extraBody = accordion(page, "Extra Settings", "section_extra");
+        fastGiftOpening = toggleRow(extraBody, "Fast gift opening", prefs.getBoolean("fast_gift_opening", true));
+        divider(extraBody);
+        hideTrainerName = toggleRow(extraBody, "Hide trainer name", prefs.getBoolean("hide_trainer_name", true));
+        divider(extraBody);
+        trainerName = textRow(extraBody, "Trainer name", prefs.getString("trainer_name", "KecleonBot"));
+        divider(extraBody);
+        resolveError12 = checkRow(extraBody, "Fix error 12",                  prefs.getBoolean("resolve_error_12", false));
+        divider(extraBody);
+        removeBuddy    = checkRow(extraBody, getString(R.string.remove_buddy), prefs.getBoolean("remove_buddy",     false));
 
         // ── Bottom action bar ─────────────────────────────────────────────────
         LinearLayout actionBar = column();
@@ -557,6 +549,42 @@ public final class MainActivity extends Activity {
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
+
+    private LinearLayout accordion(LinearLayout parent, String title, String prefKey) {
+        boolean expanded = prefs.getBoolean(prefKey, true);
+        LinearLayout wrapper = column();
+        wrapper.setBackground(shape(SURFACE, 14));
+        wrapper.setClipToOutline(true);
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setMinimumHeight(dp(52));
+        header.setPadding(dp(16), dp(12), dp(16), dp(12));
+        header.setClickable(true);
+        header.setFocusable(true);
+        TextView titleView = text(title, 15, TEXT);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        header.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView chevron = text(expanded ? "▾" : "▸", 16, ACCENT);
+        header.addView(chevron);
+        wrapper.addView(header);
+        View div = new View(this);
+        div.setBackgroundColor(BORDER);
+        div.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        wrapper.addView(div, new LinearLayout.LayoutParams(-1, 1));
+        LinearLayout body = column();
+        body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        wrapper.addView(body);
+        header.setOnClickListener(v -> {
+            boolean open = body.getVisibility() != View.VISIBLE;
+            body.setVisibility(open ? View.VISIBLE : View.GONE);
+            div.setVisibility(open ? View.VISIBLE : View.GONE);
+            chevron.setText(open ? "▾" : "▸");
+            prefs.edit().putBoolean(prefKey, open).apply();
+        });
+        parent.addView(wrapper);
+        return body;
+    }
 
     private Switch toggleRow(LinearLayout parent, String label, boolean value) {
         LinearLayout row = new LinearLayout(this);
