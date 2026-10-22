@@ -65,9 +65,10 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   throwQualities:string[];curveball:boolean;arMode:boolean;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];goldenRazzForShiny:boolean;goldenRazzForHundo:boolean;goldenRazzForGalarBirds:boolean;skipInterruptions:boolean;
   excludePokemon:number[];
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
-  fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string};
+  fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string;
+  activateItemsEnabled:boolean;activateItems:Record<string,number>};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
-type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'; promise:HeldReference64;
+type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'activate_item'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
   captureRequest?:CaptureRequest;freshPromise?:boolean;sequence?:number;researchReward?:HeldReference64;distanceMeters?:number;captureLimitMeters?:number};
 let config:Config, initialized=false, stopped=false, ready=false, lastBeat=0, allowed=false;
@@ -76,6 +77,8 @@ let excludeFilter = new catchSelection.ExclusionFilter();
 let encounterIsShiny=false, encounterIsHundo=false, encounterIsGalarBird=false;
 let pending:Pending|null=null, target:HeldReference64|null=null, throws=0;
 let berryProfileReady=false, berryCycle:any=null;
+let activateProfileReady=false;
+const lastActivated=new Map<string,number>();
 let nextAction=0, nextSpin=0, nextInventory=0, nextReport=0, lastTick=0;
 let tickCount=0,totalTickMs=0,maxTickMs=0,inventoryCountReads=0;
 const IDLE_SCAN_MS=250;
@@ -400,7 +403,8 @@ function getInventory(fullCatalog=false):{bag:Obj;counts:Record<string,number>} 
   enterStage('inventory:counts');
   const item=klass('holo-protos','Holoholo.Rpc.Item');
   const required=new Set(['PokeBall','GreatBall','UltraBall',...Object.keys(config.discard),
-    ...(config.useBerries&&config.autoCatch?config.berryOrder:[])]);
+    ...(config.useBerries&&config.autoCatch?config.berryOrder:[]),
+    ...(config.activateItemsEnabled?Object.keys(config.activateItems):[])]);
   const entries=fullCatalog?itemCatalog.CATALOG:itemCatalog.CATALOG.filter((entry:any)=>required.has(entry.name));
   const snapshot:Record<string,unknown>[]=[];
   for (const entry of entries) {
@@ -1002,6 +1006,12 @@ function poll() {
         transferLedger.finish(p.id,false);transferDispatch=null;
         emit('transfer_skipped',{id:p.id,reason:'server_rejected',status,retryAllowed:false});
       } else throw Error('Ambiguous transfer response: '+status+'; not resent');
+    } else if(p.kind==='activate_item') {
+      try {
+        const resultField=result.tryField('Result')??result.tryField('result_');
+        const status=resultField?number(resultField.value):-1;
+        emit('activate_item_response',{name:p.id,status,success:status===1});
+      } catch(e) { emit('activate_item_response',{name:p.id,status:-1,error:String(e),success:false}); }
     } else {
       if(result.class.fullName!=='Holoholo.Rpc.RecycleItemOutProto')throw Error('Incompatible discard response class; not repeated');
       const status=number(result.field('Result').value), remaining=number(result.field('NewCount').value);
@@ -1339,6 +1349,109 @@ function discard(counts:Record<string,number>,bagFull:boolean):boolean {
     {item:plan.item,count:plan.count,before:plan.before,keep:plan.keep});
   return true;
 }
+function tryActivateItem(counts:Record<string,number>):boolean {
+  if(!activateProfileReady||pending||!config.activateItemsEnabled)return false;
+  const now=Date.now();
+  const COOLDOWNS:Record<string,number>={
+    IncenseDailyAdventure:15*60000,IncenseBelugaBox:60*60000,IncenseOrdinary:60*60000,
+    LuckyEgg:30*60000,StarPiece:30*60000,TroyDisk:30*60000
+  };
+  // Incense priority: Daily > Mystery Box > Regular. Only use one.
+  const incensePriority=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
+  let incenseDone=false;
+  for(const name of incensePriority){
+    if(!(name in config.activateItems))continue;
+    const keep=config.activateItems[name];
+    const count=counts[name]??0;
+    const last=lastActivated.get(name)??0;
+    if(count>keep&&now-last>COOLDOWNS[name]){
+      incenseDone=true;
+      if(!active(true))return false;
+      try {
+        const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
+        const request=proto('UseIncenseProto');
+        request.field('IncenseType').value=itemEnum;
+        lastActivated.set(name,now);
+        reserve('activate_item',sendRpc(28,request,'UseIncenseOutProto'),name,[request]);
+        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
+        return true;
+      } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});return false;}
+    }
+    if(count>keep){incenseDone=true;break;} // Higher priority available but on cooldown; skip lower
+  }
+  // Lucky Egg (independent of incense)
+  {
+    const name='LuckyEgg';
+    if(name in config.activateItems){
+      const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
+      if(count>keep&&now-last>COOLDOWNS[name]){
+        if(!active(true))return false;
+        try {
+          const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
+          const request=proto('UseItemXpBoostProto');
+          request.field('ItemId').value=itemEnum;
+          lastActivated.set(name,now);
+          reserve('activate_item',sendRpc(143,request,'UseItemXpBoostOutProto'),name,[request]);
+          emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
+          return true;
+        } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});}
+      }
+    }
+  }
+  // Star Piece
+  {
+    const name='StarPiece';
+    if(name in config.activateItems){
+      const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
+      if(count>keep&&now-last>COOLDOWNS[name]){
+        if(!active(true))return false;
+        try {
+          const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
+          const request=proto('UseItemStarPieceProto');
+          request.field('ItemId').value=itemEnum;
+          lastActivated.set(name,now);
+          reserve('activate_item',sendRpc(230,request,'UseItemStarPieceOutProto'),name,[request]);
+          emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
+          return true;
+        } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});}
+      }
+    }
+  }
+  return false;
+}
+function activateItemPreflight() {
+  if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0)return;
+  const incenseItems=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
+  const hasIncense=incenseItems.some(name=>name in config.activateItems);
+  const hasLuckyEgg='LuckyEgg' in config.activateItems;
+  const hasStarPiece='StarPiece' in config.activateItems;
+  findService('Niantic.Holoholo.Rpc.IRpcHandler');
+  if(hasIncense){
+    const proto=klass('holo-protos','Holoholo.Rpc.UseIncenseProto');
+    proto.field('IncenseType');
+    const resp=klass('holo-protos','Holoholo.Rpc.UseIncenseOutProto');
+    resp.field('Result');
+    checkPromiseLayout(resp,true);
+  }
+  if(hasLuckyEgg){
+    const proto=klass('holo-protos','Holoholo.Rpc.UseItemXpBoostProto');
+    proto.field('ItemId');
+    const resp=klass('holo-protos','Holoholo.Rpc.UseItemXpBoostOutProto');
+    resp.field('Result');
+    checkPromiseLayout(resp,true);
+  }
+  if(hasStarPiece){
+    try {
+      const proto=klass('holo-protos','Holoholo.Rpc.UseItemStarPieceProto');
+      proto.field('ItemId');
+      const resp=klass('holo-protos','Holoholo.Rpc.UseItemStarPieceOutProto');
+      resp.field('Result');
+      checkPromiseLayout(resp,true);
+    } catch { emit('activate_item_profile',{starPiece:false,reason:'proto_unavailable'}); }
+  }
+  activateProfileReady=true;
+  emit('activate_item_profile',{available:true,enabledItems:Object.keys(config.activateItems)});
+}
 function checkPromiseLayout(response:Il2Cpp.Class,isRpc=false) {
   enterStage('preflight:promise:'+response.fullName);
   const type=isRpc?klass('holo-game','Niantic.Holoholo.Rpc.RpcPromise`1'):
@@ -1457,6 +1570,7 @@ function preflight(directory:Obj,bag:Obj) {
   if(config.transferEnabled)transferPreflight();
   if(config.inspectOwned)inspectOwnedPreflight();
   berryPreflight(bag);
+  activateItemPreflight();
   rewardPreflight();
   buddyPreflight();
   const inventoryCounts=getInventory(true).counts;
@@ -1622,6 +1736,8 @@ function tick() {
     if(target&&oldestOwnedAt!==null&&!captureFirst)transferDeadlineHits++;
     if(config.inspectOwned&&pollOwnedReads(now))return;
     if(target&&startCapture(counts))return;
+    // Activate items from bag (takes priority over discard on the same tick).
+    if(config.activateItemsEnabled&&tryActivateItem(counts)){if(pending)return;}
     // Fair scheduling: bag check and due spin cannot starve behind captures.
     if(config.cleanBag&&!cleanupPaused&&now>=nextInventory){
       nextInventory=now+1000;
@@ -1674,6 +1790,8 @@ function init(_stage:string,parameters:any) {
     showIvNames:parameters.showIvNames===true,extendedManualTransfer:parameters.extendedManualTransfer===true,
     fastGiftOpening:parameters.fastGiftOpening===true,hideTrainerName:parameters.hideTrainerName===true,trainerLabel:typeof parameters.trainerLabel==='string'&&parameters.trainerLabel.trim()!==''?parameters.trainerLabel.trim():'KecleonBot',
     removeBuddy:parameters.removeBuddy===true,
+    activateItemsEnabled:parameters.activateItemsEnabled===true,
+    activateItems:parameters.activateItems&&typeof parameters.activateItems==='object'?parameters.activateItems:{},
     maxTransfers:parameters.maxTransfers??0,sessionId:parameters.sessionId,
     maxDiscardedItems:parameters.maxDiscardedItems??0,expectedPlayerId:parameters.expectedPlayerId??'',
     automaticPreflight:parameters.automaticPreflight===true,

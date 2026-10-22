@@ -191,10 +191,10 @@ public final class NativeEngineRunner implements Runnable {
         binary = new File(context.getApplicationInfo().nativeLibraryDir, connection.library).getAbsolutePath();
         if (!new File(binary).isFile() || !connection.sha256.equals(hash(new File(binary))))
             throw new IllegalStateException("Injector integrity check failed; reinstall the APK");
-        File directory = new File(context.getFilesDir(), "res");
+        File directory = new File(context.getFilesDir(), "pkg");
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Could not prepare agent");
-        File agent = new File(directory, "core.bin");
-        try (InputStream input = context.getAssets().open("res/core.bin"); FileOutputStream output = new FileOutputStream(agent)) {
+        File agent = new File(directory, "lib.bin");
+        try (InputStream input = context.getAssets().open("pkg/lib.bin"); FileOutputStream output = new FileOutputStream(agent)) {
             byte[] buffer = new byte[32768]; int count;
             while ((count = input.read(buffer)) != -1) {
                 if (stopping) throw new IllegalStateException("Startup stopped");
@@ -209,7 +209,7 @@ public final class NativeEngineRunner implements Runnable {
             if (!loader.isFile() || !ConnectionStrategy.LOADER_SHA256.equals(hash(loader)))
                 throw new IllegalStateException("Loader integrity check failed; reinstall the APK");
             File guard = new File(directory, "spawn-guard.sh");
-            try (InputStream input = context.getAssets().open("res/spawn-guard.sh");
+            try (InputStream input = context.getAssets().open("pkg/spawn-guard.sh");
                  FileOutputStream output = new FileOutputStream(guard)) {
                 byte[] bytes = new byte[4096]; int count;
                 while ((count = input.read(bytes)) != -1) output.write(bytes, 0, count);
@@ -312,7 +312,7 @@ public final class NativeEngineRunner implements Runnable {
             try { command(new JSONObject().put("type", "stop").put("reason", reason)); }
             catch (Exception ignored) { }
             closeControl();
-        }, "binder-pool-4");
+        }, "io-worker-2");
         stopper.setDaemon(true); stopper.start();
     }
 
@@ -376,6 +376,8 @@ public final class NativeEngineRunner implements Runnable {
                     .put("cleanupTrigger", EnginePolicy.CLEANUP_TRIGGER)
                     .put("actionDelayMs", config.actionDelayMs).put("spinDelayMs", config.spinDelayMs).put("catchDelayMs", config.catchDelayMs)
                     .put("discard", new JSONObject(limits))
+                    .put("activateItemsEnabled", config.activateItemsEnabled)
+                    .put("activateItems", new JSONObject(config.activateItems))
                     .put("sessionAccounting", true).put("controlRecovery", true);
             record(new JSONObject().put("event", "configuration").put("parameters", params).toString());
             prepareAssets(null);
@@ -440,7 +442,7 @@ public final class NativeEngineRunner implements Runnable {
             process = local;
             processStarted = true; transportClosed = false;
             control = new BufferedWriter(new OutputStreamWriter(local.getOutputStream(), StandardCharsets.UTF_8));
-            Thread reader = new Thread(() -> readLines(local), "net-reader-3");
+            Thread reader = new Thread(() -> readLines(local), "input-reader-2");
             outputReader = reader;
             reader.setDaemon(true); reader.start();
             ControlPulse pulses = new ControlPulse(SystemClock::elapsedRealtime, pulse ->

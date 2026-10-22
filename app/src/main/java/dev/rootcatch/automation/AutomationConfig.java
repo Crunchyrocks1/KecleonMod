@@ -40,6 +40,8 @@ public final class AutomationConfig {
     public final boolean internalEngine;
     public final String discardLimits;
     public final int maxDiscardedItems;
+    public final boolean activateItemsEnabled;
+    public final java.util.Map<String, Integer> activateItems;
 
     private AutomationConfig(String gamePackage,
                              boolean autoCatch, java.util.List<Integer> onlyCatch, java.util.List<Integer> excludePokemon, boolean autoSpin, boolean removeBuddy,
@@ -47,7 +49,8 @@ public final class AutomationConfig {
                              int maxThrows, java.util.List<String> throwQualities, boolean curveball, boolean arMode, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
                              boolean goldenRazzForShiny, boolean goldenRazzForHundo, boolean goldenRazzForGalarBirds,
                              boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
-                             String discardLimits, int maxDiscardedItems) {
+                             String discardLimits, int maxDiscardedItems,
+                             boolean activateItemsEnabled, java.util.Map<String, Integer> activateItems) {
         this.gamePackage = gamePackage;
         this.autoCatch = autoCatch;
         this.onlyCatch = onlyCatch;
@@ -82,6 +85,8 @@ public final class AutomationConfig {
         this.internalEngine = internalEngine;
         this.discardLimits = discardLimits;
         this.maxDiscardedItems = maxDiscardedItems;
+        this.activateItemsEnabled = activateItemsEnabled;
+        this.activateItems = java.util.Collections.unmodifiableMap(activateItems);
     }
 
     public static AutomationConfig load(Context context) {
@@ -117,8 +122,21 @@ public final class AutomationConfig {
                 p.getString("trainer_name", "KecleonBot"),
                 p.getBoolean("internal_engine", true),
                 p.getString("discard_limits", dev.rootcatch.nativeengine.EnginePolicy.DEFAULT_LIMITS),
-                0
+                0,
+                p.getBoolean("activate_items", false),
+                buildActivateItems(p)
         );
+    }
+
+    private static java.util.Map<String, Integer> buildActivateItems(SharedPreferences p) {
+        java.util.LinkedHashMap<String, Integer> map = new java.util.LinkedHashMap<>();
+        if (p.getBoolean("activate_dailyIncense",  false)) map.put("IncenseDailyAdventure", p.getInt("keep_dailyIncense",  0));
+        if (p.getBoolean("activate_mysteryBox",    false)) map.put("IncenseBelugaBox",       p.getInt("keep_mysteryBox",    0));
+        if (p.getBoolean("activate_starPiece",     false)) map.put("StarPiece",              p.getInt("keep_starPiece",     0));
+        if (p.getBoolean("activate_incense",       false)) map.put("IncenseOrdinary",        p.getInt("keep_incense",       0));
+        if (p.getBoolean("activate_luckyEgg",      false)) map.put("LuckyEgg",               p.getInt("keep_luckyEgg",      0));
+        if (p.getBoolean("activate_lure",          false)) map.put("TroyDisk",               p.getInt("keep_lure",          0));
+        return map;
     }
 
     private static java.util.List<String> buildThrowQualities(SharedPreferences p) {

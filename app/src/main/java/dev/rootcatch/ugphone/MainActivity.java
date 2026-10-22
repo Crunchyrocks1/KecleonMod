@@ -68,6 +68,9 @@ public final class MainActivity extends Activity {
     private String excludePokemon = "";
     private final java.util.LinkedHashMap<String, CheckBox> itemChecks = new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String, EditText> itemAmounts = new java.util.LinkedHashMap<>();
+    private Switch activateItems;
+    private final java.util.LinkedHashMap<String, CheckBox> activateChecks = new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String, EditText> activateKeep = new java.util.LinkedHashMap<>();
     private String berryOrder;
     private String onlyCatch;
     private boolean starting;
@@ -289,6 +292,14 @@ public final class MainActivity extends Activity {
         buildItemRows(cleanOptions, EnginePolicy.parseLimits(prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS)));
         clean.setOnCheckedChangeListener((view, checked) -> cleanOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         cleanOptions.setVisibility(clean.isChecked() ? View.VISIBLE : View.GONE);
+        divider(inventoryBody);
+        activateItems = toggleRow(inventoryBody, "Activate items from bag", prefs.getBoolean("activate_items", false));
+        LinearLayout activateSubOptions = column();
+        activateSubOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
+        inventoryBody.addView(activateSubOptions);
+        buildActivateRows(activateSubOptions);
+        activateItems.setOnCheckedChangeListener((view, checked) -> activateSubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        activateSubOptions.setVisibility(activateItems.isChecked() ? View.VISIBLE : View.GONE);
 
         space(page, 8);
 
@@ -413,7 +424,9 @@ public final class MainActivity extends Activity {
                 .putBoolean("hide_trainer_name", hideTrainerName.isChecked())
                 .putString("trainer_name", name)
                 .putInt("max_transfers", 0).putString("discard_limits", limitsStr)
-                .putInt("max_discarded_items", 0).putInt("max_throws", 0);
+                .putInt("max_discarded_items", 0).putInt("max_throws", 0)
+                .putBoolean("activate_items", activateItems != null && activateItems.isChecked());
+        persistActivateItems(edit);
         try {
             edit.putInt("max_catches", read(maxCatches, 1, Integer.MAX_VALUE, getString(R.string.maximum_catches)))
                     .putInt("max_spins", read(maxSpins, 1, Integer.MAX_VALUE, getString(R.string.maximum_spins)))
@@ -597,6 +610,77 @@ public final class MainActivity extends Activity {
         if (berryGoldenRazz  != null && berryGoldenRazz.isChecked())  result.add("GoldenRazzBerry");
         if (berryGoldenPinap != null && berryGoldenPinap.isChecked()) result.add("GoldenPinapBerry");
         return String.join(",", result);
+    }
+
+    // item key → { display label, pref camelCase key }
+    private static final String[][] ACTIVATE_ITEMS = {
+        { "IncenseDailyAdventure", "Daily Adventure Incense", "dailyIncense" },
+        { "IncenseBelugaBox",      "Mystery Box",             "mysteryBox"   },
+        { "StarPiece",             "Star Piece",              "starPiece"    },
+        { "IncenseOrdinary",       "Incense",                 "incense"      },
+        { "LuckyEgg",              "Lucky Egg",               "luckyEgg"     },
+        { "TroyDisk",              "Lure Module",             "lure"         },
+    };
+
+    private void buildActivateRows(LinearLayout parent) {
+        for (String[] item : ACTIVATE_ITEMS) {
+            String name     = item[0];
+            String label    = item[1];
+            String camel    = item[2];
+            boolean enabled = prefs.getBoolean("activate_" + camel, false);
+            int keepVal     = prefs.getInt("keep_" + camel, 0);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setMinimumHeight(dp(40));
+
+            CheckBox cb = new CheckBox(this);
+            cb.setChecked(enabled);
+            cb.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+            row.addView(cb);
+
+            TextView lbl = text(label, 13, MUTED);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+            lp.setMarginStart(dp(4));
+            row.addView(lbl, lp);
+
+            EditText keepEdit = new EditText(this);
+            keepEdit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            keepEdit.setSingleLine(true);
+            keepEdit.setTextColor(TEXT);
+            keepEdit.setTextSize(13);
+            keepEdit.setText(String.valueOf(keepVal));
+            keepEdit.setContentDescription("Keep " + label);
+            keepEdit.setBackground(shape(Color.argb(30, 255, 255, 255), 8));
+            keepEdit.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            keepEdit.setPadding(dp(4), dp(4), dp(4), dp(4));
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(dp(70), dp(36));
+            ap.setMarginStart(dp(8));
+            row.addView(keepEdit, ap);
+
+            parent.addView(row);
+            activateChecks.put(camel, cb);
+            activateKeep.put(camel, keepEdit);
+            settings.add(cb);
+            settings.add(keepEdit);
+            cb.setOnCheckedChangeListener((v, checked) -> { keepEdit.setEnabled(checked); keepEdit.setAlpha(checked ? 1f : 0.4f); });
+            keepEdit.setEnabled(cb.isChecked());
+            keepEdit.setAlpha(cb.isChecked() ? 1f : 0.4f);
+        }
+    }
+
+    private void persistActivateItems(SharedPreferences.Editor edit) {
+        for (String[] item : ACTIVATE_ITEMS) {
+            String camel = item[2];
+            CheckBox cb  = activateChecks.get(camel);
+            EditText et  = activateKeep.get(camel);
+            if (cb == null || et == null) continue;
+            edit.putBoolean("activate_" + camel, cb.isChecked());
+            int keepVal = 0;
+            try { keepVal = Math.max(0, Integer.parseInt(et.getText().toString().trim())); } catch (NumberFormatException ignored) { }
+            edit.putInt("keep_" + camel, keepVal);
+        }
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
