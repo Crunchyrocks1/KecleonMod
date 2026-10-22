@@ -12,7 +12,7 @@ public enum ConnectionStrategy {
 
     public final String library, version, sha256;
     public static final String LOADER_LIBRARY = "libsilph-loader.so";
-    public static final String LOADER_SHA256 = "1399f5d2a387c7983757591e7de82834fb1e1f433fd683b0ed1f14782008701d";
+    public static final String LOADER_SHA256 = "c3da60fb24f90a9672ec0d0ad13f8df56d17607d2b9cb2c2e8981a59b8d72988";
 
     ConnectionStrategy(String library, String version, String sha256) {
         this.library = library; this.version = version; this.sha256 = sha256;
