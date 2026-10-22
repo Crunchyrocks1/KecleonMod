@@ -345,12 +345,19 @@ public final class MainActivity extends Activity {
     }
 
     private void saveSettings() {
-        String newLimits = buildLimitsFromUI();
+        String newLimits = buildLimitsFromUI(false);
         FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), newLimits);
         if (capture.isChecked() && !throwNormal.isChecked() && !throwNice.isChecked() && !throwGreat.isChecked() && !throwExcellent.isChecked())
             throw new IllegalArgumentException("Select at least one throw quality");
         if (capture.isChecked() && useBerries.isChecked() && BerryOptions.parse(berryOrder).isEmpty())
             throw new IllegalArgumentException(getString(R.string.select_berries));
+        persistSettings();
+    }
+
+    private void persistSettings() {
+        String limitsStr;
+        try { limitsStr = EnginePolicy.limitsKey(buildLimitsFromUI(true)); }
+        catch (IllegalArgumentException ignored) { limitsStr = prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS); }
         String name = trainerName.getText().toString().trim();
         if (name.isEmpty()) name = "KecleonBot";
         SharedPreferences.Editor edit = prefs.edit().putString("package", EnginePolicy.GAME).putBoolean("internal_engine", true)
@@ -375,26 +382,19 @@ public final class MainActivity extends Activity {
                 .putBoolean("fast_gift_opening", fastGiftOpening.isChecked())
                 .putBoolean("hide_trainer_name", hideTrainerName.isChecked())
                 .putString("trainer_name", name)
-                .putInt("max_transfers", 0).putString("discard_limits", EnginePolicy.limitsKey(newLimits))
+                .putInt("max_transfers", 0).putString("discard_limits", limitsStr)
                 .putInt("max_discarded_items", 0).putInt("max_throws", 0);
-        edit.putInt("max_catches", read(maxCatches, 1, Integer.MAX_VALUE, getString(R.string.maximum_catches)))
-                .putInt("max_spins", read(maxSpins, 1, Integer.MAX_VALUE, getString(R.string.maximum_spins)))
-                .putInt("spin_delay", read(spinDelay, 100, 3000, "Spin delay"))
-                .putInt("catch_delay", read(catchDelay, 100, 3000, "Catch delay"));
+        try {
+            edit.putInt("max_catches", read(maxCatches, 1, Integer.MAX_VALUE, getString(R.string.maximum_catches)))
+                    .putInt("max_spins", read(maxSpins, 1, Integer.MAX_VALUE, getString(R.string.maximum_spins)))
+                    .putInt("spin_delay", read(spinDelay, 100, 3000, "Spin delay"))
+                    .putInt("catch_delay", read(catchDelay, 100, 3000, "Catch delay"));
+        } catch (IllegalArgumentException ignored) { }
         edit.apply();
     }
 
     private void saveDraft() {
-        if (!FarmService.isBusy() && !starting && prefs != null && capture != null) {
-            try { saveSettings(); } catch (IllegalArgumentException ignored) { }
-            try {
-                prefs.edit()
-                        .putInt("max_catches", read(maxCatches, 1, Integer.MAX_VALUE, "Capture limit"))
-                        .putInt("max_spins", read(maxSpins, 1, Integer.MAX_VALUE, "Spin limit"))
-                        .putInt("spin_delay", read(spinDelay, 100, 3000, "Spin delay"))
-                        .putInt("catch_delay", read(catchDelay, 100, 3000, "Catch delay")).apply();
-            } catch (IllegalArgumentException ignored) { }
-        }
+        if (!FarmService.isBusy() && !starting && prefs != null && capture != null) persistSettings();
     }
 
     private void updatePokemonLabel() {
@@ -535,14 +535,16 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private String buildLimitsFromUI() {
+    private String buildLimitsFromUI(boolean lenient) {
         StringBuilder sb = new StringBuilder();
         for (ItemCatalog.Entry entry : ItemCatalog.ENTRIES) {
             if (!entry.discardable()) continue;
             CheckBox cb = itemChecks.get(entry.name());
             EditText et = itemAmounts.get(entry.name());
             if (cb == null || et == null || !cb.isChecked()) continue;
-            int amount = FarmPolicy.integer(et.getText().toString(), 0, 10000, entry.label());
+            int amount;
+            try { amount = FarmPolicy.integer(et.getText().toString(), 0, 10000, entry.label()); }
+            catch (IllegalArgumentException e) { if (!lenient) throw e; amount = 0; }
             if (sb.length() > 0) sb.append(',');
             sb.append(entry.name()).append('=').append(amount);
         }
