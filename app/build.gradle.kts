@@ -73,6 +73,29 @@ val checkNative = tasks.register("checkNativeRuntime") {
     }
 }
 
+// Auto-sync LOADER_SHA256 in ConnectionStrategy.java after every loader recompile
+val syncLoaderHash = tasks.register("syncLoaderHash") {
+    dependsOn(buildLoader)
+    val loaderFile = file("$jniDir/libsilph-loader.so")
+    val strategyFile = file("src/main/java/dev/rootcatch/nativeengine/ConnectionStrategy.java")
+    inputs.file(loaderFile)
+    outputs.file(strategyFile)
+    doLast {
+        val hash = sha256(loaderFile)
+        val content = strategyFile.readText()
+        val updated = content.replace(
+            Regex("LOADER_SHA256 = \"[0-9a-f]{64}\""),
+            "LOADER_SHA256 = \"$hash\""
+        )
+        if (updated != content) {
+            strategyFile.writeText(updated)
+            logger.lifecycle("LOADER_SHA256 updated to $hash")
+        } else {
+            logger.lifecycle("LOADER_SHA256 already current")
+        }
+    }
+}
+
 val releaseStore = providers.environmentVariable("SILPH_KEYSTORE").orNull
 val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
 android {
@@ -108,9 +131,10 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             isDebuggable = false
             isCrunchPngs = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseStore != null || debugKeystore.exists()) signingConfig = signingConfigs.getByName("publication")
         }
     }
@@ -120,4 +144,4 @@ android {
     }
     packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += setOf("**/librootcatch-inject.so", "**/libsilph-spawn.so", "**/libsilph-loader.so") } }
 }
-tasks.named("preBuild").configure { dependsOn(buildEngine, checkNative) }
+tasks.named("preBuild").configure { dependsOn(buildEngine, checkNative, syncLoaderHash) }
