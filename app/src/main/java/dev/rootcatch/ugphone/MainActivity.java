@@ -232,7 +232,7 @@ public final class MainActivity extends Activity {
         preConfigOpts.addView(preConfigLabel);
         goldenRazzForShiny       = subCheck(preConfigOpts, "Golden Razz for shinies",    prefs.getBoolean("golden_razz_shiny",        false));
         goldenRazzForHundo       = subCheck(preConfigOpts, "Golden Razz for hundos",     prefs.getBoolean("golden_razz_hundo",        false));
-        goldenRazzForGalarBirds  = subCheck(preConfigOpts, "Golden Razz for Galar Birds (Articuno / Zapdos / Moltres)", prefs.getBoolean("golden_razz_galar_birds", false));
+        goldenRazzForGalarBirds  = subCheck(preConfigOpts, "Golden Razz for Galar Birds", prefs.getBoolean("golden_razz_galar_birds", false));
         capture.setOnCheckedChangeListener((v, checked) -> captureSubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
         captureSubOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
         divider(catchBody);
