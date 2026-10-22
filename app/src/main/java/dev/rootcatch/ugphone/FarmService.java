@@ -207,7 +207,7 @@ public final class FarmService extends Service {
         current.skipBuddyRemoval(buddyRemovalHandled);
         current.verifyStartupOnly(verificationOnly);
         session = current; activeSession = current; workerAlive = true;
-        new Thread(current, "binder-pool-2").start();
+        new Thread(current, "jit-worker-1").start();
     }
     private void scheduleRecovery(long token, long round) {
         session = null;

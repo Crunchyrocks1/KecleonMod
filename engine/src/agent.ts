@@ -1356,103 +1356,85 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     IncenseDailyAdventure:15*60000,IncenseBelugaBox:60*60000,IncenseOrdinary:60*60000,
     LuckyEgg:30*60000,StarPiece:30*60000,TroyDisk:30*60000
   };
-  // Incense priority: Daily > Mystery Box > Regular. Only use one.
+  function useItem(name:string,count:number,keep:number):boolean {
+    if(!active(true))return false;
+    try {
+      const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
+      lastActivated.set(name,now);
+      if(activateUseItemMethod!==null){
+        // Direct IItemBag.UseItem — no proto class guessing required.
+        const promise=object(observed('UseItem',()=>findService('Niantic.Holoholo.IItemBag')
+          .method<Obj>('UseItem',1).invoke(itemEnum)),'IItemBag.UseItem:'+name);
+        reserve('activate_item',promise,name,[]);
+        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'UseItem'});
+      } else {
+        // Fallback: sendRpc with proto class names (may fail if names differ in this build).
+        const RPC_MAP:{[k:string]:[number,string,string,string]}={
+          IncenseDailyAdventure:[28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
+          IncenseBelugaBox:     [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
+          IncenseOrdinary:      [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
+          LuckyEgg:             [143,'UseItemXpBoostProto','ItemId','UseItemXpBoostOutProto'],
+          StarPiece:            [230,'UseItemStarPieceProto','ItemId','UseItemStarPieceOutProto'],
+        };
+        const entry=RPC_MAP[name];
+        if(!entry)throw Error('No RPC mapping for '+name);
+        const request=proto(entry[1]);
+        request.field(entry[2]).value=itemEnum;
+        const promise=sendRpc(entry[0],request,entry[3]);
+        reserve('activate_item',promise,name,[request]);
+        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'sendRpc'});
+      }
+      return true;
+    } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});return false;}
+  }
+  // Incense: Daily Incense > Mystery Box > Regular. Skip lower if higher is available but on cooldown.
   const incensePriority=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
-  let incenseDone=false;
   for(const name of incensePriority){
     if(!(name in config.activateItems)||!activateAvailable.has(name))continue;
-    const keep=config.activateItems[name];
-    const count=counts[name]??0;
-    const last=lastActivated.get(name)??0;
-    if(count>keep&&now-last>COOLDOWNS[name]){
-      incenseDone=true;
-      if(!active(true))return false;
-      try {
-        const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-        const request=proto('UseIncenseProto');
-        request.field('IncenseType').value=itemEnum;
-        lastActivated.set(name,now);
-        reserve('activate_item',sendRpc(28,request,'UseIncenseOutProto'),name,[request]);
-        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
-        return true;
-      } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});return false;}
-    }
-    if(count>keep){incenseDone=true;break;} // Higher priority available but on cooldown; skip lower
+    const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
+    if(count>keep&&now-last>COOLDOWNS[name])return useItem(name,count,keep);
+    if(count>keep)break;
   }
-  // Lucky Egg (independent of incense)
+  // Lucky Egg (independent of incense priority)
   {
     const name='LuckyEgg';
     if(name in config.activateItems&&activateAvailable.has(name)){
       const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
-      if(count>keep&&now-last>COOLDOWNS[name]){
-        if(!active(true))return false;
-        try {
-          const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-          const request=proto('UseItemXpBoostProto');
-          request.field('ItemId').value=itemEnum;
-          lastActivated.set(name,now);
-          reserve('activate_item',sendRpc(143,request,'UseItemXpBoostOutProto'),name,[request]);
-          emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
-          return true;
-        } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});}
-      }
+      if(count>keep&&now-last>COOLDOWNS[name])return useItem(name,count,keep);
     }
   }
-  // Star Piece
+  // Star Piece (independent of incense priority)
   {
     const name='StarPiece';
     if(name in config.activateItems&&activateAvailable.has(name)){
       const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
-      if(count>keep&&now-last>COOLDOWNS[name]){
-        if(!active(true))return false;
-        try {
-          const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-          const request=proto('UseItemStarPieceProto');
-          request.field('ItemId').value=itemEnum;
-          lastActivated.set(name,now);
-          reserve('activate_item',sendRpc(230,request,'UseItemStarPieceOutProto'),name,[request]);
-          emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name]});
-          return true;
-        } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});}
-      }
+      if(count>keep&&now-last>COOLDOWNS[name])return useItem(name,count,keep);
     }
   }
+  // TroyDisk (lures) require a PokéStop context — not handled here.
   return false;
 }
-// Tracks which item types have confirmed proto availability.
+// Confirmed available items; protos are probed lazily in tryActivateItem.
 const activateAvailable=new Set<string>();
+// Non-null when IItemBag.UseItem(Item) exists — preferred over sendRpc.
+let activateUseItemMethod:Il2Cpp.Method|null=null;
 function activateItemPreflight() {
   if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0){
     activateProfileReady=true;return;
   }
-  const incenseItems=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
-  // Each block is independently try/catched — one missing proto never breaks another item type.
-  if(incenseItems.some(name=>name in config.activateItems)){
-    try {
-      klass('holo-protos','Holoholo.Rpc.UseIncenseProto').field('IncenseType');
-      klass('holo-protos','Holoholo.Rpc.UseIncenseOutProto').field('Result');
-      for(const n of incenseItems)if(n in config.activateItems)activateAvailable.add(n);
-      emit('activate_item_profile',{type:'incense',available:true});
-    } catch(e){emit('activate_item_profile',{type:'incense',available:false,reason:String(e)});}
-  }
-  if('LuckyEgg' in config.activateItems){
-    try {
-      klass('holo-protos','Holoholo.Rpc.UseItemXpBoostProto').field('ItemId');
-      klass('holo-protos','Holoholo.Rpc.UseItemXpBoostOutProto').field('Result');
-      activateAvailable.add('LuckyEgg');
-      emit('activate_item_profile',{type:'luckyEgg',available:true});
-    } catch(e){emit('activate_item_profile',{type:'luckyEgg',available:false,reason:String(e)});}
-  }
-  if('StarPiece' in config.activateItems){
-    try {
-      klass('holo-protos','Holoholo.Rpc.UseItemStarPieceProto').field('ItemId');
-      klass('holo-protos','Holoholo.Rpc.UseItemStarPieceOutProto').field('Result');
-      activateAvailable.add('StarPiece');
-      emit('activate_item_profile',{type:'starPiece',available:true});
-    } catch(e){emit('activate_item_profile',{type:'starPiece',available:false,reason:String(e)});}
-  }
+  // Prefer IItemBag.UseItem(Item) — no proto guessing needed.
+  try {
+    const bag=findService('Niantic.Holoholo.IItemBag');
+    const m=bag.tryMethod('UseItem',1);
+    if(m&&!m.isStatic&&!m.virtualAddress.isNull()){
+      activateUseItemMethod=m;
+      emit('activate_item_profile',{method:'IItemBag.UseItem',available:true});
+    }
+  } catch(e){emit('activate_item_profile',{method:'IItemBag.UseItem',available:false,reason:String(e)});}
+  // Mark all enabled items available; tryActivateItem will catch per-item send failures.
+  for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
-  emit('activate_item_profile',{available:activateAvailable.size>0,confirmedItems:[...activateAvailable]});
+  emit('activate_item_profile',{confirmedItems:[...activateAvailable],useItemMethod:activateUseItemMethod!==null});
 }
 function checkPromiseLayout(response:Il2Cpp.Class,isRpc=false) {
   enterStage('preflight:promise:'+response.fullName);

@@ -2,17 +2,17 @@ package dev.rootcatch.nativeengine;
 
 public enum ConnectionStrategy {
     ATTACH("librootcatch-inject.so", "17.22.1",
-            "c112345e94af8a11d44c47dba9c0bd4880e9556442c7366f916a0e7418f60301"),
+            "2e8121da766dac95495742b947eabbade30355831e8338c10d963f5ebaa980ca"),
     EARLY_SPAWN("libsilph-spawn.so", "17.23.3",
-            "74d7d12d96cf8294fb3426e9c53bda322aa9774683b58509f67b0a051c9795c8"),
+            "ae80b4da9717fecc7c86ed2e9dd072d397a5859df8be26020af9d01a10d80426"),
     DIRECT_ATTACH("libsilph-spawn.so", "17.23.3",
-            "74d7d12d96cf8294fb3426e9c53bda322aa9774683b58509f67b0a051c9795c8"),
+            "ae80b4da9717fecc7c86ed2e9dd072d397a5859df8be26020af9d01a10d80426"),
     COMPAT_ATTACH("librootcatch-inject.so", "17.22.1",
-            "c112345e94af8a11d44c47dba9c0bd4880e9556442c7366f916a0e7418f60301");
+            "2e8121da766dac95495742b947eabbade30355831e8338c10d963f5ebaa980ca");
 
     public final String library, version, sha256;
     public static final String LOADER_LIBRARY = "libsilph-loader.so";
-    public static final String LOADER_SHA256 = "94ef8781f3b725e0d3328989063b0fa0d12a5d83f30540837660c5d362a668b0";
+    public static final String LOADER_SHA256 = "44eb05c669e4deafa42381a11d945072c60b8704919ba643ae5533c6e8c62266";
 
     ConnectionStrategy(String library, String version, String sha256) {
         this.library = library; this.version = version; this.sha256 = sha256;
