@@ -1455,14 +1455,23 @@ function activateItemPreflight() {
       emit('activate_item_profile',{available:false,reason:'no Item→Promise method found'});
     }
   } catch(e){emit('activate_item_profile',{available:false,reason:String(e)});}
-  // Discover proto class names for sendRpc by scanning holo-protos assembly.
+  // Probe candidate proto class names — find which ones actually exist in this build.
   try {
-    const patterns=['Incense','StarPiece','XpBoost','LuckyEgg','UseItem'];
-    const found=Il2Cpp.assemblies
-      .find(a=>a.name==='holo-protos')?.image.classes
-      .filter(c=>c.namespace==='Holoholo.Rpc'&&patterns.some(p=>c.name.includes(p)))
-      .map(c=>c.name)??[];
-    emit('activate_item_proto_scan',{classes:found});
+    const probe=(name:string)=>{try{klass('holo-protos','Holoholo.Rpc.'+name);return true;}catch{return false;}};
+    const exist=[ 'UseIncenseActionProto','UseIncenseOutProto','UseIncenseProto',
+      'UseItemXpBoostActionProto','UseItemXpBoostOutProto','UseItemXpBoostProto',
+      'UseItemStarPieceActionProto','UseItemStarPieceOutProto','UseItemStarPieceProto',
+      'UseItemActionProto','UseItemOutProto',
+      'UseConsumableItemProto','UseConsumableItemOutProto',
+    ].filter(probe);
+    emit('activate_item_proto_scan',{existing:exist});
+    // For each existing proto, log its non-static field names so we use the right one.
+    const fields:Record<string,string[]>={};
+    for(const name of exist){
+      try{fields[name]=klass('holo-protos','Holoholo.Rpc.'+name).fields
+        .filter(f=>!f.isStatic).map(f=>f.name+':'+f.type.name);}catch{}
+    }
+    if(Object.keys(fields).length>0)emit('activate_item_proto_fields',{fields});
   } catch(e){emit('activate_item_proto_scan',{error:String(e)});}
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
