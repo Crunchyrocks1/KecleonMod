@@ -2,17 +2,17 @@ package dev.rootcatch.nativeengine;
 
 public enum ConnectionStrategy {
     ATTACH("librootcatch-inject.so", "17.22.1",
-            "1f1626533db197623d206db5b9abbf060eb974940a793b209a07c8cfaed58bc9"),
+            "cec700fb7bb3bac270c2f5752ce735b6007338710aa8cb7e997af328d9e311a3"),
     EARLY_SPAWN("libsilph-spawn.so", "17.23.3",
-            "4294f41cd33a0bfafe238db85a56a9ea89063f3aa87c63f5c7e7693b287eb645"),
+            "cf1a8058349cf5721b2e5162ddb23a59827c5090c3e4249a1caba220a847e5ee"),
     DIRECT_ATTACH("libsilph-spawn.so", "17.23.3",
-            "4294f41cd33a0bfafe238db85a56a9ea89063f3aa87c63f5c7e7693b287eb645"),
+            "cf1a8058349cf5721b2e5162ddb23a59827c5090c3e4249a1caba220a847e5ee"),
     COMPAT_ATTACH("librootcatch-inject.so", "17.22.1",
-            "1f1626533db197623d206db5b9abbf060eb974940a793b209a07c8cfaed58bc9");
+            "cec700fb7bb3bac270c2f5752ce735b6007338710aa8cb7e997af328d9e311a3");
 
     public final String library, version, sha256;
     public static final String LOADER_LIBRARY = "libsilph-loader.so";
-    public static final String LOADER_SHA256 = "715de5cb2d5d07869799b818254441640bf70052f1919efe11c1decf2af7131d";
+    public static final String LOADER_SHA256 = "fb2ecce9b29b02e39f575498221fc54cad6274bbfdb93c04ee24beb4beb95f89";
 
     ConnectionStrategy(String library, String version, String sha256) {
         this.library = library; this.version = version; this.sha256 = sha256;
@@ -36,9 +36,9 @@ public enum ConnectionStrategy {
     }
     public static String probeCommand(String guard) {
         runtimePath(guard);
-        return "( silph_parent_ns=$(readlink /proc/self/ns/mnt) || exit 90; "
+        return "( ns_handle=$(readlink /proc/self/ns/mnt) || exit 90; "
                 + "exec unshare -m -- /system/bin/sh " + EnginePolicy.quote(guard)
-                + " --probe \"$silph_parent_ns\" )";
+                + " --probe \"$ns_handle\" )";
     }
     private static void runtimePath(String path) {
         if (path == null || !path.startsWith("/data/") || path.contains("/../") || path.endsWith("/.."))
@@ -49,9 +49,9 @@ public enum ConnectionStrategy {
         for (String path : new String[]{binary, guard, agent, directory}) {
             runtimePath(path);
         }
-        return "silph_parent_ns=$(readlink /proc/self/ns/mnt) || exit 90; "
+        return "ns_handle=$(readlink /proc/self/ns/mnt) || exit 90; "
                 + "exec unshare -m -- /system/bin/sh " + EnginePolicy.quote(guard)
-                + " \"$silph_parent_ns\" " + EnginePolicy.quote(binary)
+                + " \"$ns_handle\" " + EnginePolicy.quote(binary)
                 + " " + EnginePolicy.quote(directory)
                 + " " + EnginePolicy.quote(binary.substring(0, binary.lastIndexOf('/') + 1) + LOADER_LIBRARY)
                 + " " + target

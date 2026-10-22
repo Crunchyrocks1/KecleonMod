@@ -36,10 +36,10 @@ final class CompatibilitySession {
         long began = android.os.SystemClock.elapsedRealtime();
         RootShell.Result environment = root.execute(ConnectionCapabilities.COMMAND, 3000);
         if (stopped.getAsBoolean()) throw new InterruptedException("Startup stopped");
-        File directory = new File(context.getFilesDir(), "engine");
+        File directory = new File(context.getFilesDir(), FarmPolicy.AGENT_DIR);
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Could not prepare connection");
         File guard = new File(directory, "compatibility-guard.sh");
-        try (InputStream input = context.getAssets().open("engine/spawn-guard.sh"); FileOutputStream output = new FileOutputStream(guard)) {
+        try (InputStream input = context.getAssets().open(FarmPolicy.AGENT_DIR + "/spawn-guard.sh"); FileOutputStream output = new FileOutputStream(guard)) {
             byte[] buffer = new byte[4096]; int count;
             while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
         }

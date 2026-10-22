@@ -56,7 +56,7 @@ final class LogExporter {
                         + "Rotated logs and time/size-limited sources: sources.jsonl records omissions and truncation.\n"
                         + "report-status.json summarizes confirmed results; latest.jsonl contains engine events; health.jsonl contains health samples.\n"
                         + "The game is not restarted and pending actions are not resumed after a process exit.\n");
-                try (InputStream source = context.getAssets().open("engine/injector.json")) { entry(zip, "resources/injector.json", source); }
+                try (InputStream source = context.getAssets().open(FarmPolicy.AGENT_DIR + "/injector.json")) { entry(zip, "resources/injector.json", source); }
             }
             values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0);
             if (context.getContentResolver().update(uri, values, null, null) != 1)
