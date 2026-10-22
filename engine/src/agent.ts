@@ -56,7 +56,7 @@ import capturePlanning from './capture-planning.cjs';
 
 type Obj = Il2Cpp.Object;
 type Location = {latitude:number; longitude:number};
-type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; cleanBag:boolean; readOnly:boolean;
+type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms:boolean; cleanBag:boolean; readOnly:boolean;
   maxThrows:number; actionDelayMs:number; spinDelayMs:number; catchDelayMs:number; maxCatches:number;maxSpins:number;discard:Record<string,number>; gamePackage:string;
   diagnosticTrace:boolean;activeTrace:boolean;encounterOnly:boolean;inspectOwned:boolean;transferEnabled:boolean;
   keepShiny:boolean;keepHundo:boolean;keepNundo:boolean;keepDynamax:boolean;keepHatched:boolean;keepBackground:boolean;keepShinyBackground:boolean;keepFieldResearch:boolean;
@@ -109,6 +109,8 @@ let lastMapScan:Record<string,number>={};
 const mapObserver=new mapObservation.MapObserver();
 const spinObserver=new spinObservation.SpinObserver();
 let nextSpinBlockedReport=0,spinBagBlocked=false;
+let gymMethodName:string|null=null,gymMethodProbed=false;
+const GYM_CANDIDATES=['get_ActiveGyms','get_ActiveForts','get_NearbyGyms','get_Gyms','get_VisitableGyms','get_GymBuildings','get_ActiveFortDetails'];
 let storageCache:{at:number;pokemonCount:number;maxPokemon:number;pokemonBagFull:boolean}|null=null;
 let startupGate:any=null,activationRequest:any=null;
 let locationAdapter:any=null;
@@ -1248,6 +1250,28 @@ function spin(directory:Obj) {
     scan.selectedId=id;scan.selectedDistanceMeters=dist;spinObserver.observe(now,scan,emit);return;
   }
   scan.complete=true;spinObserver.observe(now,scan,emit);
+  if(!config.spinGyms||!gymMethodName)return;
+  try {
+    enterStage('spin:gyms');
+    const gymObjects=enumerate(object(directory.method<Obj>(gymMethodName,0).invoke(),'MapDirectory.ActiveGyms'));
+    for(const gymObject of gymObjects) {
+      const id=(gymObject.method<Il2Cpp.String>('get_Id',0).invoke()).content!;
+      const until=stops.get(id)??0;
+      if(until>now)continue;
+      const gymLocation=readLocation(gymObject.method<Il2Cpp.ValueType>('get_Location',0).invoke(),'gym');
+      const dist=distance(location,gymLocation);
+      if(!Number.isFinite(dist)||dist>80)continue;
+      const request=proto('FortSearchProto');
+      field(request,'Id',Il2Cpp.string(id));field(request,'PlayerLatDegrees',lat);field(request,'PlayerLngDegrees',lng);
+      field(request,'FortLatDegrees',gymLocation.latitude);field(request,'FortLngDegrees',gymLocation.longitude);
+      if(!active(true))return;
+      reserve('spin',sendRpc(101,request,'FortSearchOutProto'),id,[request]);
+      emit('gym_spin',{id,distanceMeters:dist,method:gymMethodName});return;
+    }
+  } catch(e) {
+    emit('gym_probe',{phase:'runtime_error',method:gymMethodName,error:String(e),retryAllowed:false});
+    gymMethodName=null;
+  }
 }
 // true: a surplus still needs processing; false: at floors or safety quota reached.
 function discard(counts:Record<string,number>,bagFull:boolean):boolean {
@@ -1370,6 +1394,18 @@ function preflight(directory:Obj,bag:Obj) {
       .inflate(request,klass('holo-protos','Holoholo.Rpc.FortSearchOutProto'));
     if(method.virtualAddress.isNull())throw Error('SendRpc/FortSearch unavailable');
     checkPromiseLayout(klass('holo-protos','Holoholo.Rpc.FortSearchOutProto'),true);
+    if(config.spinGyms) {
+      const dirClass=Il2Cpp.domain.assembly('holo-game').image.class('Niantic.Holoholo.Map.IMapPlaceDirectoryService');
+      const allMethods:string[]=[];
+      dirClass.methods.forEach((m:any)=>allMethods.push(m.name));
+      emit('gym_probe',{phase:'enumerate',count:allMethods.length,methods:allMethods});
+      for(const name of GYM_CANDIDATES) {
+        const m=dirClass.tryMethod(name,0);
+        if(m&&!m.isStatic&&!m.virtualAddress.isNull()){gymMethodName=name;break;}
+      }
+      gymMethodProbed=true;
+      emit('gym_probe',{phase:'preflight',found:gymMethodName!==null,method:gymMethodName,candidates:GYM_CANDIDATES});
+    }
   }
   if(config.autoSpin||config.cleanBag)
     findService('Niantic.Holoholo.Services.IItemBagService').method<boolean>('get_IsFull',0).invoke();
@@ -1583,7 +1619,7 @@ function init(_stage:string,parameters:any) {
   useNativeWindow=Number.isInteger(parameters.sdk)&&parameters.sdk>=30;
   if(parameters.gamePackage!=='com.nianticlabs.pokemongo'||parameters.version!=='0.433.1')throw Error('Unsupported profile');
   if(parameters.mode!==undefined&&parameters.mode!=='FARMER')throw Error('Invalid engine mode');
-  config={gamePackage:parameters.gamePackage,autoCatch:!!parameters.autoCatch,autoSpin:!!parameters.autoSpin,
+  config={gamePackage:parameters.gamePackage,autoCatch:!!parameters.autoCatch,autoSpin:!!parameters.autoSpin,spinGyms:!!parameters.spinGyms,
     onlyCatch:catchSelection.read(parameters.onlyCatch),
     cleanBag:!!parameters.cleanBag,readOnly:!!parameters.readOnly,...sessionLimits.read(parameters),
     maxThrows:parameters.maxThrows===0?0:Math.min(10,Math.max(1,parameters.maxThrows|0)),

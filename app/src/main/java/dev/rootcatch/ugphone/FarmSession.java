@@ -117,7 +117,7 @@ final class FarmSession implements Runnable {
                     .put("sdk", Build.VERSION.SDK_INT).put("modelReported", Build.MODEL)
                     .put("abisReported", Arrays.toString(Build.SUPPORTED_ABIS)).put("rawLogs", true)
                     .put("automaticPreflight", true).put("singleAttach", true).put("readOnlyObservationMs", 10_000)
-                    .put("continuous", true).put("autoCatch", config.autoCatch).put("autoSpin", config.autoSpin)
+                    .put("continuous", true).put("autoCatch", config.autoCatch).put("autoSpin", config.autoSpin).put("spinGyms", config.spinGyms)
                     .put("mode", "FARMER")
                     .put("cleanBag", config.cleanBag).put("transfersEnabled", transfers.enabled)
                     .put("transferPolicy", transfers.proofKey()).put("cleanupLimits", EnginePolicy.limitsKey(config.discardLimits))

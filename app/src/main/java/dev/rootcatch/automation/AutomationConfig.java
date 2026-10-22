@@ -10,6 +10,7 @@ public final class AutomationConfig {
     public final boolean autoCatch;
     public final java.util.List<Integer> onlyCatch;
     public final boolean autoSpin;
+    public final boolean spinGyms;
     public final boolean removeBuddy;
     public final boolean cleanBag;
     public final int actionDelayMs;
@@ -36,7 +37,7 @@ public final class AutomationConfig {
 
     private AutomationConfig(String gamePackage,
                              boolean autoCatch, java.util.List<Integer> onlyCatch, boolean autoSpin, boolean removeBuddy,
-                             boolean cleanBag, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
+                             boolean cleanBag, boolean spinGyms, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
                              int maxThrows, String throwQuality, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
                              boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
@@ -46,6 +47,7 @@ public final class AutomationConfig {
         this.autoSpin = autoSpin;
         this.removeBuddy = removeBuddy;
         this.cleanBag = cleanBag;
+        this.spinGyms = spinGyms;
         this.actionDelayMs = actionDelayMs;
         this.spinDelayMs = spinDelayMs;
         this.catchDelayMs = catchDelayMs;
@@ -78,6 +80,7 @@ public final class AutomationConfig {
                 p.getBoolean("spin", true),
                 p.getBoolean("remove_buddy", false),
                 p.getBoolean("clean", false),
+                p.getBoolean("spin_gyms", false),
                 clamp(p.getInt("delay", 150), 100, 3000),
                 clamp(p.getInt("spin_delay", p.getInt("delay", 150)), 100, 3000),
                 clamp(p.getInt("catch_delay", p.getInt("delay", 150)), 100, 3000),

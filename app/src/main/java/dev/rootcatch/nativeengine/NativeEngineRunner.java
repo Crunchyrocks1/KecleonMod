@@ -346,7 +346,7 @@ public final class NativeEngineRunner implements Runnable {
                     .put("version", EnginePolicy.VERSION).put("autoCatch", config.autoCatch)
                     .put("onlyCatch", new org.json.JSONArray(config.onlyCatch))
                     .put("emptyMapRecoveryEnabled", emptyMapRecoveryEnabled)
-                    .put("autoSpin", config.autoSpin).put("cleanBag", config.cleanBag)
+                    .put("autoSpin", config.autoSpin).put("spinGyms", config.spinGyms).put("cleanBag", config.cleanBag)
                     .put("removeBuddy", config.removeBuddy && !buddyRemovalHandled)
                     .put("readOnly", readOnly).put("maxThrows", config.maxThrows)
                     .put("throwQuality", config.throwQuality).put("notificationShadeSupport", true)

@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<View> settings = new ArrayList<>();
     private SharedPreferences prefs;
-    private Switch capture, spin, transfer, clean, useBerries, showIvNames, extendedManualTransfer, fastGiftOpening, hideTrainerName;
+    private Switch capture, spin, spinGyms, transfer, clean, useBerries, showIvNames, extendedManualTransfer, fastGiftOpening, hideTrainerName;
     private CheckBox keepShiny, keepHundo, keepNundo, keepDynamax, keepHatched, keepBackground, keepShinyBackground, keepFieldResearch, resolveError12, removeBuddy;
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
     private LinearLayout transferOptions, cleanOptions, berryOptions;
@@ -205,6 +205,7 @@ public final class MainActivity extends Activity {
 
         divider(features);
         spin = toggleRow(features, "Spin PokéStops", prefs.getBoolean("spin", true));
+        spinGyms = toggleRow(features, "Spin Gyms  (experimental)", prefs.getBoolean("spin_gyms", false));
 
         divider(features);
         transfer = toggleRow(features, "Transfer new catches", prefs.getBoolean("transfer", false));
@@ -356,7 +357,7 @@ public final class MainActivity extends Activity {
                 .putString("throw_quality", throwQuality.name())
                 .putString(PokemonSelection.KEY, onlyCatch)
                 .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", berryOrder)
-                .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("clean", clean.isChecked())
+                .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("spin_gyms", spinGyms.isChecked()).putBoolean("clean", clean.isChecked())
                 .putBoolean("resolve_error_12", resolveError12.isChecked())
                 .putBoolean("remove_buddy", removeBuddy.isChecked())
                 .putBoolean("transfer", transfer.isChecked()).putBoolean("keep_shiny", keepShiny.isChecked()).putBoolean("keep_hundo", keepHundo.isChecked())
