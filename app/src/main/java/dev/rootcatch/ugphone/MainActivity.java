@@ -622,13 +622,17 @@ public final class MainActivity extends Activity {
         { "TroyDisk",              "Lure Module",             "lure"         },
     };
 
+    // These items only ever have a count of 1 — no keep-N input needed.
+    private static final java.util.Set<String> NO_KEEP_ITEMS =
+        new java.util.HashSet<>(java.util.Arrays.asList("dailyIncense", "mysteryBox"));
+
     private void buildActivateRows(LinearLayout parent) {
         for (String[] item : ACTIVATE_ITEMS) {
             String name     = item[0];
             String label    = item[1];
             String camel    = item[2];
-            boolean enabled = prefs.getBoolean("activate_" + camel, false);
-            int keepVal     = prefs.getInt("keep_" + camel, 0);
+            boolean enabled  = prefs.getBoolean("activate_" + camel, false);
+            boolean showKeep = !NO_KEEP_ITEMS.contains(camel);
 
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -645,28 +649,34 @@ public final class MainActivity extends Activity {
             lp.setMarginStart(dp(4));
             row.addView(lbl, lp);
 
-            EditText keepEdit = new EditText(this);
-            keepEdit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-            keepEdit.setSingleLine(true);
-            keepEdit.setTextColor(TEXT);
-            keepEdit.setTextSize(13);
-            keepEdit.setText(String.valueOf(keepVal));
-            keepEdit.setContentDescription("Keep " + label);
-            keepEdit.setBackground(shape(Color.argb(30, 255, 255, 255), 8));
-            keepEdit.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            keepEdit.setPadding(dp(4), dp(4), dp(4), dp(4));
-            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(dp(70), dp(36));
-            ap.setMarginStart(dp(8));
-            row.addView(keepEdit, ap);
+            if (showKeep) {
+                int keepVal = prefs.getInt("keep_" + camel, 0);
+                EditText keepEdit = new EditText(this);
+                keepEdit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                keepEdit.setSingleLine(true);
+                keepEdit.setTextColor(TEXT);
+                keepEdit.setTextSize(13);
+                keepEdit.setText(String.valueOf(keepVal));
+                keepEdit.setContentDescription("Keep " + label);
+                keepEdit.setBackground(shape(Color.argb(30, 255, 255, 255), 8));
+                keepEdit.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+                keepEdit.setPadding(dp(4), dp(4), dp(4), dp(4));
+                LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(dp(70), dp(36));
+                ap.setMarginStart(dp(8));
+                row.addView(keepEdit, ap);
+                activateKeep.put(camel, keepEdit);
+                settings.add(keepEdit);
+                cb.setOnCheckedChangeListener((v, checked) -> {
+                    keepEdit.setEnabled(checked);
+                    keepEdit.setAlpha(checked ? 1f : 0.4f);
+                });
+                keepEdit.setEnabled(enabled);
+                keepEdit.setAlpha(enabled ? 1f : 0.4f);
+            }
 
             parent.addView(row);
             activateChecks.put(camel, cb);
-            activateKeep.put(camel, keepEdit);
             settings.add(cb);
-            settings.add(keepEdit);
-            cb.setOnCheckedChangeListener((v, checked) -> { keepEdit.setEnabled(checked); keepEdit.setAlpha(checked ? 1f : 0.4f); });
-            keepEdit.setEnabled(cb.isChecked());
-            keepEdit.setAlpha(cb.isChecked() ? 1f : 0.4f);
         }
     }
 
@@ -674,11 +684,14 @@ public final class MainActivity extends Activity {
         for (String[] item : ACTIVATE_ITEMS) {
             String camel = item[2];
             CheckBox cb  = activateChecks.get(camel);
-            EditText et  = activateKeep.get(camel);
-            if (cb == null || et == null) continue;
+            if (cb == null) continue;
             edit.putBoolean("activate_" + camel, cb.isChecked());
+            EditText et = activateKeep.get(camel);
             int keepVal = 0;
-            try { keepVal = Math.max(0, Integer.parseInt(et.getText().toString().trim())); } catch (NumberFormatException ignored) { }
+            if (et != null) {
+                try { keepVal = Math.max(0, Integer.parseInt(et.getText().toString().trim())); }
+                catch (NumberFormatException ignored) {}
+            }
             edit.putInt("keep_" + camel, keepVal);
         }
     }

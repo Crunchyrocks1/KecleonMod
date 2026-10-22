@@ -1370,21 +1370,23 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     if(!active(true))return false;
     try {
       const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-      lastActivated.set(name,now);
       if(activateUseItemMethod!==null){
-        // Direct IItemBag.UseItem — no proto class guessing required.
-        const promise=object(observed('UseItem',()=>findService('Niantic.Holoholo.IItemBag')
-          .method<Obj>('UseItem',1).invoke(itemEnum)),'IItemBag.UseItem:'+name);
+        // Call the obfuscation-stable method found in preflight by signature.
+        const mn=activateUseItemMethod.name;
+        const promise=object(observed('ActivateItem',()=>findService('Niantic.Holoholo.IItemBag')
+          .method<Obj>(mn,1).invoke(itemEnum)),'IItemBag.'+mn+':'+name);
         reserve('activate_item',promise,name,[]);
-        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'UseItem'});
+        // Only record cooldown after reserve succeeds; prevents locking out on failed calls.
+        lastActivated.set(name,now);
+        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:mn});
       } else {
-        // Fallback: sendRpc with proto class names (may fail if names differ in this build).
+        // Fallback sendRpc — no direct method was found in preflight.
         const RPC_MAP:{[k:string]:[number,string,string,string]}={
           IncenseDailyAdventure:[28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
           IncenseBelugaBox:     [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
           IncenseOrdinary:      [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
-          LuckyEgg:             [143,'UseItemXpBoostProto','ItemId','UseItemXpBoostOutProto'],
-          StarPiece:            [230,'UseItemStarPieceProto','ItemId','UseItemStarPieceOutProto'],
+          LuckyEgg:             [143,'UseItemXpBoostProto','item_id_','UseItemXpBoostOutProto'],
+          StarPiece:            [230,'UseItemStarPieceProto','item_id_','UseItemStarPieceOutProto'],
         };
         const entry=RPC_MAP[name];
         if(!entry)throw Error('No RPC mapping for '+name);
@@ -1392,7 +1394,8 @@ function tryActivateItem(counts:Record<string,number>):boolean {
         request.field(entry[2]).value=itemEnum;
         const promise=sendRpc(entry[0],request,entry[3]);
         reserve('activate_item',promise,name,[request]);
-        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'sendRpc'});
+        lastActivated.set(name,now);
+        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'sendRpc:'+entry[1]});
       }
       return true;
     } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});return false;}
@@ -1424,9 +1427,9 @@ function tryActivateItem(counts:Record<string,number>):boolean {
   // TroyDisk (lures) require a PokéStop context — not handled here.
   return false;
 }
-// Confirmed available items; protos are probed lazily in tryActivateItem.
+// Confirmed available items for activation.
 const activateAvailable=new Set<string>();
-// Non-null when IItemBag.UseItem(Item) exists — preferred over sendRpc.
+// Method on IItemBag that takes one Item enum arg and returns a Promise — found by signature.
 let activateUseItemMethod:Il2Cpp.Method|null=null;
 function activateItemPreflight() {
   if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0){
@@ -1434,25 +1437,28 @@ function activateItemPreflight() {
   }
   try {
     const bag=findService('Niantic.Holoholo.IItemBag');
-    // Log every method on IItemBag so we can see exactly what's callable.
-    const bagMethods=bag.class.methods.map(m=>m.name+'('+m.parameters.length+') ret='+m.returnType.name);
-    emit('activate_item_bag_methods',{methods:bagMethods});
-    const m=bag.tryMethod('UseItem',1);
-    if(m&&!m.isStatic&&!m.virtualAddress.isNull()){
-      activateUseItemMethod=m;
-      emit('activate_item_profile',{method:'IItemBag.UseItem',available:true,returnType:m.returnType.name});
+    // Find by signature: non-static, 1 param of type Item, returns a Promise.
+    // This is stable against name obfuscation — the game's item activation method
+    // is the only IItemBag method with this exact signature.
+    const candidates=bag.class.methods.filter(m2=>
+      !m2.isStatic&&!m2.virtualAddress.isNull()&&
+      m2.parameters.length===1&&
+      m2.parameters[0].type.name==='Holoholo.Rpc.Item'&&
+      m2.returnType.name.includes('Promise'));
+    if(candidates.length>0){
+      activateUseItemMethod=candidates[0];
+      emit('activate_item_profile',{
+        method:candidates[0].name,paramType:'Holoholo.Rpc.Item',
+        retType:candidates[0].returnType.name,available:true,
+        allCandidates:candidates.map(m2=>m2.name+'→'+m2.returnType.name)});
     } else {
-      // UseItem(1) not found — log all param-count variants of UseItem/Activate methods
-      const candidates=bag.class.methods.filter(m2=>
-        m2.name.toLowerCase().includes('use')||m2.name.toLowerCase().includes('activ'));
-      emit('activate_item_profile',{method:'IItemBag.UseItem',available:false,
-        candidates:candidates.map(m2=>m2.name+'('+m2.parameters.length+')')});
+      emit('activate_item_profile',{available:false,reason:'no Item→Promise method found on IItemBag'});
     }
-  } catch(e){emit('activate_item_profile',{method:'IItemBag.UseItem',available:false,reason:String(e)});}
-  // Mark all enabled items available unconditionally; per-item errors are caught in tryActivateItem.
+  } catch(e){emit('activate_item_profile',{available:false,reason:String(e)});}
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
-  emit('activate_item_profile',{confirmedItems:[...activateAvailable],useItemMethod:activateUseItemMethod!==null});
+  emit('activate_item_profile',{confirmedItems:[...activateAvailable],useItemMethod:activateUseItemMethod!==null,
+    useItemMethodName:activateUseItemMethod?.name??null});
 }
 function checkPromiseLayout(response:Il2Cpp.Class,isRpc=false) {
   enterStage('preflight:promise:'+response.fullName);
