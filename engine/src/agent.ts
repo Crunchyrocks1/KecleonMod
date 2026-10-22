@@ -1437,9 +1437,11 @@ function activateItemPreflight() {
   }
   try {
     const bag=findService('Niantic.Holoholo.IItemBag');
-    // Find by signature: non-static, 1 param of type Item, returns a Promise.
-    // This is stable against name obfuscation — the game's item activation method
-    // is the only IItemBag method with this exact signature.
+    // Log ALL 1-param methods on IItemBag with param types so we pick the right one.
+    const oneParamMethods=bag.class.methods
+      .filter(m2=>!m2.isStatic&&m2.parameters.length===1)
+      .map(m2=>m2.name+'('+m2.parameters[0].type.name+')→'+m2.returnType.name);
+    emit('activate_item_bag_1param',{methods:oneParamMethods});
     const candidates=bag.class.methods.filter(m2=>
       !m2.isStatic&&!m2.virtualAddress.isNull()&&
       m2.parameters.length===1&&
@@ -1447,18 +1449,25 @@ function activateItemPreflight() {
       m2.returnType.name.includes('Promise'));
     if(candidates.length>0){
       activateUseItemMethod=candidates[0];
-      emit('activate_item_profile',{
-        method:candidates[0].name,paramType:'Holoholo.Rpc.Item',
-        retType:candidates[0].returnType.name,available:true,
-        allCandidates:candidates.map(m2=>m2.name+'→'+m2.returnType.name)});
+      emit('activate_item_profile',{method:candidates[0].name,available:true,
+        allCandidates:candidates.map(m2=>m2.name+'('+m2.parameters[0].type.name+')→'+m2.returnType.name)});
     } else {
-      emit('activate_item_profile',{available:false,reason:'no Item→Promise method found on IItemBag'});
+      emit('activate_item_profile',{available:false,reason:'no Item→Promise method found'});
     }
   } catch(e){emit('activate_item_profile',{available:false,reason:String(e)});}
+  // Discover proto class names for sendRpc by scanning holo-protos assembly.
+  try {
+    const patterns=['Incense','StarPiece','XpBoost','LuckyEgg','UseItem'];
+    const found=Il2Cpp.assemblies
+      .find(a=>a.name==='holo-protos')?.image.classes
+      .filter(c=>c.namespace==='Holoholo.Rpc'&&patterns.some(p=>c.name.includes(p)))
+      .map(c=>c.name)??[];
+    emit('activate_item_proto_scan',{classes:found});
+  } catch(e){emit('activate_item_proto_scan',{error:String(e)});}
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
-  emit('activate_item_profile',{confirmedItems:[...activateAvailable],useItemMethod:activateUseItemMethod!==null,
-    useItemMethodName:activateUseItemMethod?.name??null});
+  emit('activate_item_profile',{confirmedItems:[...activateAvailable],
+    useItemMethod:activateUseItemMethod!==null,useItemMethodName:activateUseItemMethod?.name??null});
 }
 function checkPromiseLayout(response:Il2Cpp.Class,isRpc=false) {
   enterStage('preflight:promise:'+response.fullName);
