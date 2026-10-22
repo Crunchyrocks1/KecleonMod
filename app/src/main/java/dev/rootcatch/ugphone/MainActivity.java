@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.ImageView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -39,16 +40,16 @@ import java.util.List;
 
 public final class MainActivity extends Activity {
     private static final int
-        BG      = 0xFF141618,
-        SURFACE = 0xFF1E2228,
-        BORDER  = 0xFF2A3040,
-        TEXT    = 0xFFE3E6EA,
-        MUTED   = 0xFF8A9099,
-        DIM     = 0xFF545C6B,
-        ACCENT  = 0xFF4F9DE8,
-        GREEN   = 0xFF52D67A,
-        RED     = 0xFFF87171,
-        HEADER  = 0xFF0D1117;
+        BG      = 0xFF0D1117,
+        SURFACE = 0xFF161B22,
+        BORDER  = 0xFF30363D,
+        TEXT    = 0xFFE6EDF3,
+        MUTED   = 0xFF8B949E,
+        DIM     = 0xFF484F58,
+        ACCENT  = 0xFF4493F8,
+        GREEN   = 0xFF3FB950,
+        RED     = 0xFFF85149,
+        HEADER  = 0xFF010409;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<View> settings = new ArrayList<>();
@@ -58,6 +59,7 @@ public final class MainActivity extends Activity {
     private CheckBox throwNormal, throwNice, throwGreat, throwExcellent, curveball, arMode;
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
     private LinearLayout transferOptions, cleanOptions;
+    private View statusDot;
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
     private Button start, export, clearStatistics, pokemonSelector;
     private CheckBox berryRazz, berryPinap, berryNanab, berryGoldenRazz, berryGoldenPinap;
@@ -97,19 +99,32 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setBackgroundColor(HEADER);
-        header.setPadding(dp(18), dp(14), dp(18), dp(14));
-        TextView appTitle = text("KecleonMod", 18, TEXT);
+        header.setPadding(dp(14), dp(11), dp(16), dp(11));
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.kecleon);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(34), dp(34));
+        logoLp.setMarginEnd(dp(10));
+        header.addView(logo, logoLp);
+        TextView appTitle = text("KecleonMod", 17, TEXT);
         appTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.addView(appTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView versionTag = text("v" + dev.rootcatch.BuildConfig.VERSION_NAME, 11, DIM);
+        header.addView(versionTag);
         screen.addView(header);
 
         // ── Status strip ──────────────────────────────────────────────────────
         LinearLayout statusStrip = new LinearLayout(this);
         statusStrip.setOrientation(LinearLayout.HORIZONTAL);
         statusStrip.setGravity(Gravity.CENTER_VERTICAL);
-        statusStrip.setBackgroundColor(0xFF111318);
-        statusStrip.setPadding(dp(18), dp(7), dp(18), dp(7));
-        status = text("Ready", 12, DIM);
+        statusStrip.setBackgroundColor(Color.argb(0xFF, 1, 10, 20));
+        statusStrip.setPadding(dp(16), dp(7), dp(16), dp(7));
+        statusDot = new View(this);
+        statusDot.setBackground(shape(DIM, 99));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(6), dp(6));
+        dotLp.setMarginEnd(dp(8));
+        statusStrip.addView(statusDot, dotLp);
+        status = text("Ready", 11, DIM);
         status.setSingleLine(true);
         status.setEllipsize(TextUtils.TruncateAt.END);
         statusStrip.addView(status, new LinearLayout.LayoutParams(-1, -2));
@@ -121,40 +136,38 @@ public final class MainActivity extends Activity {
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout page = column();
-        page.setPadding(dp(14), dp(16), dp(14), dp(20));
+        page.setPadding(dp(12), dp(12), dp(12), dp(14));
         scroll.addView(page);
 
         // ── Elapsed + stats tiles ─────────────────────────────────────────────
-        elapsed = text("00:00:00", 28, TEXT);
+        LinearLayout elapsedRow = row();
+        elapsedRow.setGravity(Gravity.CENTER_VERTICAL);
+        elapsed = text("00:00:00", 24, TEXT);
         elapsed.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        elapsed.setPadding(dp(2), 0, 0, dp(12));
-        page.addView(elapsed);
+        elapsedRow.addView(elapsed, new LinearLayout.LayoutParams(0, -2, 1));
+        clearStatistics = ghostButton("Clear");
+        clearStatistics.setLayoutParams(new LinearLayout.LayoutParams(-2, dp(34)));
+        elapsedRow.addView(clearStatistics);
+        page.addView(elapsedRow);
+        clearStatistics.setOnClickListener(view -> {
+            if (!starting && FarmService.clearStatistics(this)) renderState();
+        });
+        space(page, 8);
 
         LinearLayout statsRow1 = row();
         caught      = statTile(statsRow1, "Catches");
         spun        = statTile(statsRow1, "Spins");
+        transferred = statTile(statsRow1, "Transferred");
         page.addView(statsRow1);
-        space(page, 6);
+        space(page, 4);
         LinearLayout statsRow2 = row();
-        transferred = statTile(statsRow2, "Transferred");
-        discarded   = statTile(statsRow2, "Items deleted");
+        discarded   = statTile(statsRow2, "Items del");
+        xp          = statTile(statsRow2, "XP");
+        stardust    = statTile(statsRow2, "Stardust");
         page.addView(statsRow2);
-        space(page, 6);
-        LinearLayout statsRow3 = row();
-        xp          = statTile(statsRow3, "XP");
-        stardust    = statTile(statsRow3, "Stardust");
-        page.addView(statsRow3);
-        space(page, 10);
-
-        clearStatistics = ghostButton("Clear statistics");
-        clearStatistics.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
-        page.addView(clearStatistics);
-        clearStatistics.setOnClickListener(view -> {
-            if (!starting && FarmService.clearStatistics(this)) renderState();
-        });
 
         // ── Accordion sections ────────────────────────────────────────────────
-        space(page, 16);
+        space(page, 12);
 
         // ── Catch Settings ────────────────────────────────────────────────────
         LinearLayout catchBody = accordion(page, "Catch Settings", "section_catch");
@@ -268,7 +281,7 @@ public final class MainActivity extends Activity {
         // ── Bottom action bar ─────────────────────────────────────────────────
         LinearLayout actionBar = column();
         actionBar.setBackgroundColor(HEADER);
-        actionBar.setPadding(dp(14), dp(10), dp(14), dp(16));
+        actionBar.setPadding(dp(12), dp(10), dp(12), dp(14));
         screen.addView(actionBar);
 
         start = primaryButton("Start");
@@ -281,7 +294,7 @@ public final class MainActivity extends Activity {
             }
             begin();
         });
-        space(actionBar, 8);
+        space(actionBar, 6);
         export = ghostButton(getString(R.string.export_logs));
         actionBar.addView(export);
         export.setOnClickListener(view -> exportLogs());
@@ -424,7 +437,9 @@ public final class MainActivity extends Activity {
         String block = busy ? "" : startBlock();
         String statusText = !block.isEmpty() ? block : (starting ? "Preparing…" : FarmService.status());
         status.setText(statusText);
-        status.setTextColor(!block.isEmpty() ? Color.rgb(255, 170, 80) : running ? GREEN : DIM);
+        int statusColor = !block.isEmpty() ? Color.rgb(255, 170, 80) : running ? GREEN : DIM;
+        status.setTextColor(statusColor);
+        statusDot.setBackground(shape(statusColor, 99));
 
         for (View setting : settings) { setting.setEnabled(!busy); setting.setAlpha(busy ? 0.5f : 1); }
 
@@ -435,11 +450,11 @@ public final class MainActivity extends Activity {
         } else if (running) {
             start.setText("Stop");
             start.setBackground(shape(RED, 14));
-            start.setTextColor(BG);
+            start.setTextColor(TEXT);
         } else {
             start.setText("Start");
-            start.setBackground(shape(GREEN, 14));
-            start.setTextColor(BG);
+            start.setBackground(shape(ACCENT, 14));
+            start.setTextColor(TEXT);
         }
         start.setEnabled(!closing && !starting && (!busy || running) && block.isEmpty());
         export.setEnabled(!busy);
@@ -558,8 +573,8 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setMinimumHeight(dp(52));
-        header.setPadding(dp(16), dp(12), dp(16), dp(12));
+        header.setMinimumHeight(dp(46));
+        header.setPadding(dp(16), dp(10), dp(16), dp(10));
         header.setClickable(true);
         header.setFocusable(true);
         TextView titleView = text(title, 15, TEXT);
@@ -590,8 +605,8 @@ public final class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(52));
-        row.setPadding(dp(14), dp(10), dp(10), dp(10));
+        row.setMinimumHeight(dp(46));
+        row.setPadding(dp(14), dp(8), dp(10), dp(8));
         row.addView(text(label, 15, TEXT), new LinearLayout.LayoutParams(0, -2, 1));
         Switch sw = new Switch(this);
         sw.setChecked(value);
@@ -611,8 +626,8 @@ public final class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(52));
-        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        row.setMinimumHeight(dp(46));
+        row.setPadding(dp(14), dp(8), dp(14), dp(8));
         CheckBox cb = new CheckBox(this);
         cb.setChecked(value);
         cb.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
@@ -630,7 +645,7 @@ public final class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(44));
+        row.setMinimumHeight(dp(38));
         CheckBox cb = new CheckBox(this);
         cb.setChecked(value);
         cb.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
@@ -711,8 +726,8 @@ public final class MainActivity extends Activity {
     private TextView statTile(LinearLayout parent, String label) {
         LinearLayout tile = column();
         tile.setBackground(shape(SURFACE, 12));
-        tile.setPadding(dp(12), dp(10), dp(12), dp(10));
-        TextView value = text("0", 22, TEXT);
+        tile.setPadding(dp(10), dp(8), dp(10), dp(8));
+        TextView value = text("0", 20, TEXT);
         value.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         tile.addView(value);
         tile.addView(text(label, 11, MUTED));
@@ -729,8 +744,8 @@ public final class MainActivity extends Activity {
         btn.setTextSize(16);
         btn.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         btn.setTextColor(BG);
-        btn.setBackground(shape(GREEN, 14));
-        btn.setMinHeight(dp(52));
+        btn.setBackground(shape(ACCENT, 14));
+        btn.setMinHeight(dp(50));
         btn.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         btn.setPadding(dp(14), dp(12), dp(14), dp(12));
         return btn;
