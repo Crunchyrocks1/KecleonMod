@@ -1372,31 +1372,24 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     if(!active(true))return false;
     try {
       const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-      if(activateUseItemMethod!==null){
-        // zis returns a non-generic Niantic.Promises.Promise which has no completedValue field,
-        // so reserve() would throw. Call fire-and-forget: the item is consumed server-side.
-        const mn=activateUseItemMethod.name;
-        findService('Niantic.Holoholo.IItemBag').method<Obj>(mn,1).invoke(itemEnum);
-        lastActivated.set(name,now);
-        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:mn});
-      } else {
-        // Fallback sendRpc — no direct method was found in preflight.
-        const RPC_MAP:{[k:string]:[number,string,string,string]}={
-          IncenseDailyAdventure:[28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
-          IncenseBelugaBox:     [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
-          IncenseOrdinary:      [28,'UseIncenseProto','IncenseType','UseIncenseOutProto'],
-          LuckyEgg:             [143,'UseItemXpBoostProto','item_id_','UseItemXpBoostOutProto'],
-          StarPiece:            [230,'UseItemStarPieceProto','item_id_','UseItemStarPieceOutProto'],
-        };
-        const entry=RPC_MAP[name];
-        if(!entry)throw Error('No RPC mapping for '+name);
-        const request=proto(entry[1]);
-        request.field(entry[2]).value=itemEnum;
-        const promise=sendRpc(entry[0],request,entry[3]);
-        reserve('activate_item',promise,name,[request]);
-        lastActivated.set(name,now);
-        emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:'sendRpc:'+entry[1]});
-      }
+      // Correct proto names discovered from live holo-protos assembly scan.
+      // UseIncenseActionOutProto response not confirmed; UseItemXpBoostOutProto used for
+      // incense as a compatible generic response — protobuf field numbers align for Result.
+      const RPC_MAP:{[k:string]:[number,string,string,string]}={
+        IncenseDailyAdventure:[28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
+        IncenseBelugaBox:     [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
+        IncenseOrdinary:      [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
+        LuckyEgg:             [143,'UseItemXpBoostProto',  'Item',       'UseItemXpBoostOutProto'],
+        StarPiece:            [143,'UseItemXpBoostProto',  'Item',       'UseItemXpBoostOutProto'],
+      };
+      const entry=RPC_MAP[name];
+      if(!entry)throw Error('No RPC mapping for '+name);
+      const request=proto(entry[1]);
+      request.field(entry[2]).value=itemEnum;
+      const promise=sendRpc(entry[0],request,entry[3]);
+      reserve('activate_item',promise,name,[request]);
+      lastActivated.set(name,now);
+      emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:entry[1]});
       return true;
     } catch(e){emit('activate_item_error',{name,phase:'send',error:String(e)});return false;}
   }
