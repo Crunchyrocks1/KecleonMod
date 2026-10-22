@@ -1372,13 +1372,12 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     if(!active(true))return false;
     try {
       const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
-      // Correct proto names discovered from live holo-protos assembly scan.
-      // UseIncenseActionOutProto response not confirmed; UseItemXpBoostOutProto used for
-      // incense as a compatible generic response — protobuf field numbers align for Result.
-      const RPC_MAP:{[k:string]:[number,string,string,string]}={
-        IncenseDailyAdventure:[28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
-        IncenseBelugaBox:     [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
-        IncenseOrdinary:      [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto'],
+      // RPC_MAP: [rpcId, requestProto, itemField, responseProto, extraFields?]
+      // Usage=1 is required on UseIncenseActionProto — without it the server gets Usage=UNSET and rejects.
+      const RPC_MAP:{[k:string]:[number,string,string,string,(Record<string,number>)?]}={
+        IncenseDailyAdventure:[28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto',{Usage:1}],
+        IncenseBelugaBox:     [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto',{Usage:1}],
+        IncenseOrdinary:      [28, 'UseIncenseActionProto','IncenseType','UseItemXpBoostOutProto',{Usage:1}],
         LuckyEgg:             [143,'UseItemXpBoostProto',  'Item',       'UseItemXpBoostOutProto'],
         StarPiece:            [143,'UseItemXpBoostProto',  'Item',       'UseItemXpBoostOutProto'],
       };
@@ -1386,6 +1385,10 @@ function tryActivateItem(counts:Record<string,number>):boolean {
       if(!entry)throw Error('No RPC mapping for '+name);
       const request=proto(entry[1]);
       request.field(entry[2]).value=itemEnum;
+      if(entry[4])for(const [fld,val] of Object.entries(entry[4])){
+        try{request.field(fld).value=val;}
+        catch(fe){emit('activate_item_field_warn',{name,field:fld,error:String(fe)});}
+      }
       const promise=sendRpc(entry[0],request,entry[3]);
       reserve('activate_item',promise,name,[request]);
       lastActivated.set(name,now);
@@ -1465,6 +1468,19 @@ function activateItemPreflight() {
         .filter(f=>!f.isStatic).map(f=>f.name+':'+f.type.name);}catch{}
     }
     if(Object.keys(fields).length>0)emit('activate_item_proto_fields',{fields});
+    // Scan nested enum types to decode server result codes.
+    const enumNames=['UseIncenseActionProto+Types+Usage','UseItemXpBoostOutProto+Types+Result'];
+    const enumVals:Record<string,unknown>={};
+    for(const ename of enumNames){
+      for(const sep of ['+','.']){
+        try{
+          const ec=klass('holo-protos','Holoholo.Rpc.'+ename.replace(/\+/g,sep));
+          enumVals[ename]=ec.fields.filter((f:any)=>f.isStatic).map((f:any)=>({name:f.name,value:f.value}));
+          break;
+        }catch{}
+      }
+    }
+    if(Object.keys(enumVals).length>0)emit('activate_item_enum_scan',{enums:enumVals});
   } catch(e){emit('activate_item_proto_scan',{error:String(e)});}
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
