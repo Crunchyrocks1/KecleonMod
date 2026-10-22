@@ -205,7 +205,7 @@ public final class MainActivity extends Activity {
 
         divider(features);
         spin = toggleRow(features, "Spin PokéStops", prefs.getBoolean("spin", true));
-        spinGyms = toggleRow(features, "Spin Gyms  (experimental)", prefs.getBoolean("spin_gyms", false));
+        spinGyms = toggleRow(features, "Spin Gyms", prefs.getBoolean("spin_gyms", false));
 
         divider(features);
         transfer = toggleRow(features, "Transfer new catches", prefs.getBoolean("transfer", false));
