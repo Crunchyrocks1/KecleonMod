@@ -1386,7 +1386,12 @@ function tryActivateItem(counts:Record<string,number>):boolean {
       const request=proto(entry[1]);
       request.field(entry[2]).value=itemEnum;
       if(entry[4])for(const [fld,val] of Object.entries(entry[4])){
-        try{request.field(fld).value=val;}
+        try{
+          // frida-il2cpp-bridge rejects plain integers for nested enum types.
+          // Write directly to the field's memory offset to bypass type checking.
+          const fd=request.class.field(fld);
+          request.handle.add(fd.offset).writeS32(val);
+        }
         catch(fe){emit('activate_item_field_warn',{name,field:fld,error:String(fe)});}
       }
       const promise=sendRpc(entry[0],request,entry[3]);
@@ -1468,19 +1473,19 @@ function activateItemPreflight() {
         .filter(f=>!f.isStatic).map(f=>f.name+':'+f.type.name);}catch{}
     }
     if(Object.keys(fields).length>0)emit('activate_item_proto_fields',{fields});
-    // Scan nested enum types to decode server result codes.
-    const enumNames=['UseIncenseActionProto+Types+Usage','UseItemXpBoostOutProto+Types+Result'];
-    const enumVals:Record<string,unknown>={};
-    for(const ename of enumNames){
-      for(const sep of ['+','.']){
+    // Scan nested enum types via field-type reflection — class name lookup with +Types+ doesn't work.
+    try{
+      const enumVals:Record<string,unknown>={};
+      const scanFieldEnum=(protoName:string,fieldName:string,key:string)=>{
         try{
-          const ec=klass('holo-protos','Holoholo.Rpc.'+ename.replace(/\+/g,sep));
-          enumVals[ename]=ec.fields.filter((f:any)=>f.isStatic).map((f:any)=>({name:f.name,value:f.value}));
-          break;
-        }catch{}
-      }
-    }
-    if(Object.keys(enumVals).length>0)emit('activate_item_enum_scan',{enums:enumVals});
+          const ec=proto(protoName).field(fieldName).type.class;
+          enumVals[key]=ec.fields.filter((f:any)=>f.isStatic).map((f:any)=>({name:f.name,value:f.value}));
+        }catch(e){enumVals[key]='error:'+String(e);}
+      };
+      scanFieldEnum('UseIncenseActionProto','Usage','UseIncenseActionProto.Usage');
+      scanFieldEnum('UseItemXpBoostOutProto','Result','UseItemXpBoostOutProto.Result');
+      emit('activate_item_enum_scan',{enums:enumVals});
+    }catch(e){emit('activate_item_enum_scan',{error:String(e)});}
   } catch(e){emit('activate_item_proto_scan',{error:String(e)});}
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
