@@ -1373,12 +1373,10 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     try {
       const itemEnum=klass('holo-protos','Holoholo.Rpc.Item').field(name).value;
       if(activateUseItemMethod!==null){
-        // Call the obfuscation-stable method found in preflight by signature.
+        // zis returns a non-generic Niantic.Promises.Promise which has no completedValue field,
+        // so reserve() would throw. Call fire-and-forget: the item is consumed server-side.
         const mn=activateUseItemMethod.name;
-        const promise=object(observed('ActivateItem',()=>findService('Niantic.Holoholo.IItemBag')
-          .method<Obj>(mn,1).invoke(itemEnum)),'IItemBag.'+mn+':'+name);
-        reserve('activate_item',promise,name,[]);
-        // Only record cooldown after reserve succeeds; prevents locking out on failed calls.
+        findService('Niantic.Holoholo.IItemBag').method<Obj>(mn,1).invoke(itemEnum);
         lastActivated.set(name,now);
         emit('activate_item_requested',{name,count,keep,cooldownMs:COOLDOWNS[name],method:mn});
       } else {
