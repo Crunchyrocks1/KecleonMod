@@ -134,6 +134,7 @@ let rangeObserver:any=null;
 let lastRangeObservation:any=null,captureRangeState=capturePlanning.range(null,0);
 let capturePriorityActions=0,transferDeadlineHits=0;
 let eggPresentationAdapter:any=null;
+function jitter(ms:number):number{return Math.round(ms*(0.85+Math.random()*0.30));}
 function captureRange(now=Date.now()):number {
   const next=capturePlanning.range(lastRangeObservation,now);
   if(next.meters!==captureRangeState.meters||next.reason!==captureRangeState.reason)
@@ -679,7 +680,7 @@ function reserve(kind:Pending['kind'],promise:Obj,id:string,held:Obj[]=[],extra:
   if(config.sessionAccounting&&!Number.isSafeInteger(requestSequence+1))throw Error('Action sequence exhausted');
   pending={kind,promise:promiseHandle,handles:[promiseHandle,...held.map((x,i)=>retain(x,kind+':argument:'+i))],
     started:Date.now(),id,...extra,sequence:config.sessionAccounting?++requestSequence:undefined};
-  nextAction=pending.started+config.actionDelayMs;
+  nextAction=pending.started+jitter(config.actionDelayMs);
   lastRequestAt=pending.started;operationalState='waiting_'+kind;
   emit('pending',{kind,id});
   if(detailedTracing())trace('promise:reserved',{kind,id,promiseClass:promise.class.fullName,address:promise.handle.toString(),
@@ -823,7 +824,7 @@ function poll() {
       emit('berry_rejected',{id:p.id,item:p.item,reason,elapsedMs:Date.now()-p.started,
         retryAllowed:false,captureMayContinue:true,berryCountAdded:0});
       pending=null;p.handles.forEach(h=>h.free());
-      nextAction=Math.max(nextAction,p.started+config.actionDelayMs);return;
+      nextAction=Math.max(nextAction,p.started+jitter(config.actionDelayMs));return;
     }
     // A despawned/unavailable encounter is not a reason to retry the same object
     // forever or stop farming all other nearby objects.
@@ -832,7 +833,7 @@ function poll() {
         elapsedMs:Date.now()-p.started});seen.set(p.id,Date.now()+LOST_TARGET_COOLDOWN_MS);
       if(config.encounterOnly){emit('probe_result',{mode:'ENCOUNTER_ONLY',outcome:'rejected',id:p.id,reason});stop('Encounter probe rejected; no ball thrown');return;}
       pending=null;skipTarget('encounter_rejected');p.handles.forEach(h=>h.free());
-      nextAction=Math.max(nextAction,p.started+config.actionDelayMs);return;
+      nextAction=Math.max(nextAction,p.started+jitter(config.actionDelayMs));return;
     }
     if(p.kind==='capture') {
       if(config.transferEnabled) {
@@ -844,7 +845,7 @@ function poll() {
         captureCountAdded:0,transferAllowed:false});
       pending=null;skipTarget('capture_rejected');seen.set(p.id,Date.now()+300000);
       p.handles.forEach(h=>h.free());
-      nextAction=Math.max(nextAction,p.started+config.actionDelayMs);return;
+      nextAction=Math.max(nextAction,p.started+jitter(config.actionDelayMs));return;
     }
     throw Error('Response rejected: '+p.kind+' '+reason);
   }
@@ -994,7 +995,7 @@ function poll() {
             locationTreatmentKept:!!locationAdapter});
           // The request has settled and will not be sent again. No pending
           // inventory reconciliation or startup loop is left to block farming.
-          nextAction=Math.max(nextAction,p.started+config.actionDelayMs);return;
+          nextAction=Math.max(nextAction,p.started+jitter(config.actionDelayMs));return;
         }
       }
       if(!policy.discardConfirmed(status,p.before,p.count,remaining,p.keep))throw Error('Discard unconfirmed or retention minimum breached; not repeated');
@@ -1004,8 +1005,8 @@ function poll() {
     }
     // Minimum spacing is measured from the request, not added again after its reply.
     if(reportSessionLimits())return;
-    if(p.kind==='spin') nextSpin=Math.max(nextSpin,p.started+config.spinDelayMs);
-    else nextAction=Math.max(nextAction,p.started+(p.kind==='capture'?config.catchDelayMs:config.actionDelayMs));
+    if(p.kind==='spin') nextSpin=Math.max(nextSpin,p.started+jitter(config.spinDelayMs));
+    else nextAction=Math.max(nextAction,p.started+jitter(p.kind==='capture'?config.catchDelayMs:config.actionDelayMs));
   } catch(error) {
     if(!(error instanceof ResearchProfileError))throw error;
     researchQueue.uncertain(p.kind,p.id,Date.now());

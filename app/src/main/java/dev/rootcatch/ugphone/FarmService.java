@@ -21,7 +21,7 @@ import dev.rootcatch.nativeengine.TransferOptions;
 
 public final class FarmService extends Service {
     static final String START = "dev.rootcatch.ugphone.START", STOP = "dev.rootcatch.ugphone.STOP";
-    private static final String CHANNEL = "rootcatch-farm";
+    private static final String CHANNEL = "bg_service";
     private static final int NOTIFICATION = 601;
     private static volatile boolean running, exporting, closing, workerAlive;
     private static volatile String status = "Ready";
@@ -108,7 +108,7 @@ public final class FarmService extends Service {
         super.onCreate();
         restoreLast(this);
         getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(CHANNEL,
-                "KecleonMod service", NotificationManager.IMPORTANCE_LOW));
+                "Background Service", NotificationManager.IMPORTANCE_LOW));
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) { if (!running) stopSelf(); return START_NOT_STICKY; }
@@ -148,7 +148,7 @@ public final class FarmService extends Service {
         approvedGameStop = intent.getBooleanExtra("userApprovedGameStop", false)
                 && "USER_START_BUTTON".equals(intent.getStringExtra("startupAuthorization"));
         status = "Preparing…"; cleanupNote = ""; update(true);
-        wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KecleonMod:Farm");
+        wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "app:bg");
         wakeLock.setReferenceCounted(false); wakeLock.acquire(120_000L);
         nextWakeRenew = SystemClock.elapsedRealtime() + 60_000;
         startCycle(false, "");
@@ -207,7 +207,7 @@ public final class FarmService extends Service {
         current.skipBuddyRemoval(buddyRemovalHandled);
         current.verifyStartupOnly(verificationOnly);
         session = current; activeSession = current; workerAlive = true;
-        new Thread(current, "rootcatch-farm").start();
+        new Thread(current, "binder-pool-2").start();
     }
     private void scheduleRecovery(long token, long round) {
         session = null;
@@ -266,7 +266,7 @@ public final class FarmService extends Service {
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, FarmService.class).setAction(STOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("KecleonMod · " + getSharedPreferences(dev.rootcatch.automation.AutomationConfig.PREFS, MODE_PRIVATE).getString("trainer_name", "KecleonBot") + " · " + (running ? status : "Finished"))
+                .setContentTitle(getSharedPreferences(dev.rootcatch.automation.AutomationConfig.PREFS, MODE_PRIVATE).getString("trainer_name", "KecleonBot") + " · " + (running ? status : "Finished"))
                 .setContentText(counters.compact()).setContentIntent(open).setOnlyAlertOnce(true)
                 .setSubText(counters.rewardLine())
                 .setStyle(new Notification.BigTextStyle().bigText(counters.compact() + "\n" + (counters.rewardLine())

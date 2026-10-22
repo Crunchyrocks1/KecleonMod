@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 public final class AutomationConfig {
-    public static final String PREFS = "rootcatch";
+    public static final String PREFS = "app_config";
 
     public final String gamePackage;
     public final boolean autoCatch;

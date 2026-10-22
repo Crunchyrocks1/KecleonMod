@@ -12,7 +12,7 @@ public enum ConnectionStrategy {
 
     public final String library, version, sha256;
     public static final String LOADER_LIBRARY = "libsilph-loader.so";
-    public static final String LOADER_SHA256 = "69777afbd6250753a2db0e6060d69f2d8d13402ffae4094c6d7d6b9122c6f6d6";
+    public static final String LOADER_SHA256 = "7e757bdcdf4ef97292087c03a7bdfa3e1ae8ea9bc1d43615544945ec436d883d";
 
     ConnectionStrategy(String library, String version, String sha256) {
         this.library = library; this.version = version; this.sha256 = sha256;
@@ -36,9 +36,9 @@ public enum ConnectionStrategy {
     }
     public static String probeCommand(String guard) {
         runtimePath(guard);
-        return "( ns_handle=$(readlink /proc/self/ns/mnt) || exit 90; "
+        return "( root_ns_ref=$(readlink /proc/self/ns/mnt) || exit 90; "
                 + "exec unshare -m -- /system/bin/sh " + EnginePolicy.quote(guard)
-                + " --probe \"$ns_handle\" )";
+                + " --probe \"$root_ns_ref\" )";
     }
     private static void runtimePath(String path) {
         if (path == null || !path.startsWith("/data/") || path.contains("/../") || path.endsWith("/.."))
@@ -49,9 +49,9 @@ public enum ConnectionStrategy {
         for (String path : new String[]{binary, guard, agent, directory}) {
             runtimePath(path);
         }
-        return "ns_handle=$(readlink /proc/self/ns/mnt) || exit 90; "
+        return "root_ns_ref=$(readlink /proc/self/ns/mnt) || exit 90; "
                 + "exec unshare -m -- /system/bin/sh " + EnginePolicy.quote(guard)
-                + " \"$ns_handle\" " + EnginePolicy.quote(binary)
+                + " \"$root_ns_ref\" " + EnginePolicy.quote(binary)
                 + " " + EnginePolicy.quote(directory)
                 + " " + EnginePolicy.quote(binary.substring(0, binary.lastIndexOf('/') + 1) + LOADER_LIBRARY)
                 + " " + target

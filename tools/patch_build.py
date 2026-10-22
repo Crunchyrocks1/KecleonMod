@@ -30,18 +30,22 @@ try:
 except ImportError:
     sys.exit("Missing dependency -- run:  pip install colorama")
 
-PATCHER_VERSION = "1.3"
+PATCHER_VERSION = "1.4"
 
 # ---- project paths -----------------------------------------------------------
 ROOT           = Path(__file__).resolve().parents[1]
 JNI_DIR        = ROOT / "app/src/main/jniLibs/arm64-v8a"
 LOADER_POLICY  = ROOT / "native/loader-policy.c"
 LOADER_ADAPTER = ROOT / "native/loader-adapter.c"
-SPAWN_GUARD    = ROOT / "app/src/main/assets/engine/spawn-guard.sh"
 LOADER_STATE   = ROOT / "app/src/main/java/dev/rootcatch/nativeengine/LoaderState.java"
 BUILD_GRADLE   = ROOT / "app/build.gradle.kts"
+NER_JAVA       = ROOT / "app/src/main/java/dev/rootcatch/nativeengine/NativeEngineRunner.java"
+FARM_SERVICE   = ROOT / "app/src/main/java/dev/rootcatch/ugphone/FarmService.java"
+ASSETS_DIR     = ROOT / "app/src/main/assets"
+ENGINE_BUILD   = ROOT / "engine/build.cjs"
 CONN_STRATEGY  = ROOT / "app/src/main/java/dev/rootcatch/nativeengine/ConnectionStrategy.java"
 APK_OUT        = ROOT / "app/build/outputs/apk/release/app-release.apk"
+# spawn-guard.sh lives inside the agent assets dir; path is resolved dynamically in main()
 PATCH_LIBS     = ["librootcatch-inject.so", "libsilph-spawn.so"]
 
 # ---- slot width -- must equal len("frida-agent-64.so") == 17 ----------------
@@ -128,6 +132,38 @@ APP_ID_POOL = [
     "com.system.audio.manager",
     "com.android.media.service",
     "com.google.android.sync",
+]
+
+# thread names in NativeEngineRunner.java (stop thread)
+THREAD_STOP_POOL = [
+    "async-task-3", "binder-pool-4", "io-worker-2", "hw-binder-3",
+    "work-thread-2", "jit-worker-3", "dex-opt-2", "gc-worker-1",
+    "input-event-3", "net-thread-2",
+]
+
+# thread names in NativeEngineRunner.java (output reader thread)
+THREAD_READER_POOL = [
+    "io-worker-1", "async-reader-2", "binder-reader-1", "net-reader-3",
+    "pipe-reader-1", "input-reader-2", "hw-reader-1", "jit-reader-2",
+    "gc-reader-1", "dex-reader-2",
+]
+
+# thread name in FarmService.java (farm session thread)
+THREAD_FARM_POOL = [
+    "binder-pool-2", "async-task-1", "work-thread-1", "io-dispatcher-1",
+    "hw-binder-1", "task-worker-3", "bg-thread-2", "jit-worker-1",
+    "dex-worker-2", "gc-worker-3",
+]
+
+# agent assets sub-directory name
+AGENT_DIR_POOL = [
+    "res", "data", "lib", "cfg", "sys", "mod", "ext", "pkg", "bin", "opt",
+]
+
+# agent JS filename inside the assets sub-directory
+AGENT_FILE_POOL = [
+    "runtime.bin", "config.bin", "data.bin", "lib.bin", "init.bin",
+    "core.bin", "module.bin", "service.bin", "worker.bin", "loader.bin",
 ]
 
 # ---- display helpers ---------------------------------------------------------
@@ -234,6 +270,35 @@ def read_app_id():
     m = re.search(r'applicationId = "([^"]+)"', text)
     return m.group(1) if m else "dev.rootcatch.ugphonetest"
 
+def read_thread_stop():
+    text = NER_JAVA.read_text(encoding="utf-8")
+    m = re.search(r'closeControl\(\);\s*\n\s*\}, "([^"]+)"\)', text)
+    if m: return m.group(1)
+    # fallback: any value from pool appearing in thread constructor
+    for name in THREAD_STOP_POOL:
+        if '"' + name + '")' in text: return name
+    return "async-task-3"
+
+def read_thread_reader():
+    text = NER_JAVA.read_text(encoding="utf-8")
+    m = re.search(r'Thread\(\(\) -> readLines\(local\), "([^"]+)"\)', text)
+    return m.group(1) if m else "io-worker-1"
+
+def read_thread_farm():
+    text = FARM_SERVICE.read_text(encoding="utf-8")
+    m = re.search(r'new Thread\(current, "([^"]+)"\)\.start\(\)', text)
+    return m.group(1) if m else "binder-pool-2"
+
+def read_agent_dir():
+    text = NER_JAVA.read_text(encoding="utf-8")
+    m = re.search(r'File directory = new File\(context\.getFilesDir\(\), "([^"]+)"\)', text)
+    return m.group(1) if m else "res"
+
+def read_agent_file():
+    text = NER_JAVA.read_text(encoding="utf-8")
+    m = re.search(r'File agent = new File\(directory, "([^"]+)"\)', text)
+    return m.group(1) if m else "runtime.bin"
+
 def pick_other(pool, current):
     choices = [x for x in pool if x != current]
     if not choices:
@@ -302,7 +367,7 @@ def step_patch_ns_var(cur, new, dry):
         row("new variable", "'" + new + "'", G)
         row("occurrences replaced", str(count), G)
 
-def step_patch_env_vars(cur_scope, new_scope, cur_ctxfd, new_ctxfd, dry):
+def step_patch_env_vars(cur_scope, new_scope, cur_ctxfd, new_ctxfd, dry, spawn_guard=None):
     section("Patching loader env var names" + dry_tag(dry))
 
     # loader-adapter.c -- scope var (getenv + 2x unsetenv occurrences)
@@ -311,9 +376,9 @@ def step_patch_env_vars(cur_scope, new_scope, cur_ctxfd, new_ctxfd, dry):
     c2 = simple_replace(LOADER_ADAPTER, cur_ctxfd, new_ctxfd, dry)
 
     # spawn-guard.sh -- scope var
-    c3 = simple_replace(SPAWN_GUARD, cur_scope, new_scope, dry)
+    c3 = simple_replace(spawn_guard, cur_scope, new_scope, dry) if spawn_guard and spawn_guard.exists() else 0
     # spawn-guard.sh -- context fd var
-    c4 = simple_replace(SPAWN_GUARD, cur_ctxfd, new_ctxfd, dry)
+    c4 = simple_replace(spawn_guard, cur_ctxfd, new_ctxfd, dry) if spawn_guard and spawn_guard.exists() else 0
 
     if c1 + c3 == 0:
         warn("Scope var '" + cur_scope + "' not found in either file")
@@ -397,6 +462,54 @@ def step_update_strategy_hashes(hashes, dry):
     if updated != text and not dry:
         CONN_STRATEGY.write_text(updated, encoding="utf-8", newline="\n")
 
+def step_patch_thread_names(cur_stop, new_stop, cur_reader, new_reader, cur_farm, new_farm, dry):
+    section("Patching thread names" + dry_tag(dry))
+
+    # stop thread lambda ends with closeControl(); before the closing brace
+    c1 = simple_replace(NER_JAVA, '}, "' + cur_stop + '")', '}, "' + new_stop + '")', dry)
+    # reader thread -- full constructor line is unique
+    c2 = simple_replace(NER_JAVA, 'readLines(local), "' + cur_reader + '")', 'readLines(local), "' + new_reader + '")', dry)
+    # farm session thread in FarmService
+    c3 = simple_replace(FARM_SERVICE, 'new Thread(current, "' + cur_farm + '")', 'new Thread(current, "' + new_farm + '")', dry)
+
+    if c1 == 0: warn("Stop thread '" + cur_stop + "' not found in NativeEngineRunner.java")
+    else: ok("stop thread:   " + cur_stop + "  ->  " + new_stop)
+    if c2 == 0: warn("Reader thread '" + cur_reader + "' not found in NativeEngineRunner.java")
+    else: ok("reader thread: " + cur_reader + "  ->  " + new_reader)
+    if c3 == 0: warn("Farm thread '" + cur_farm + "' not found in FarmService.java")
+    else: ok("farm thread:   " + cur_farm + "  ->  " + new_farm)
+
+def step_patch_agent_path(cur_dir, new_dir, cur_file, new_file, dry):
+    import shutil
+    section("Patching agent file path" + dry_tag(dry))
+
+    # NativeEngineRunner.java -- filesDir subdirectory name
+    c1 = simple_replace(NER_JAVA, 'getFilesDir(), "' + cur_dir + '")', 'getFilesDir(), "' + new_dir + '")', dry)
+    # NativeEngineRunner.java -- local agent filename
+    c2 = simple_replace(NER_JAVA, 'directory, "' + cur_file + '")', 'directory, "' + new_file + '")', dry)
+    # NativeEngineRunner.java -- asset open paths
+    c3 = simple_replace(NER_JAVA, '"' + cur_dir + '/' + cur_file + '"', '"' + new_dir + '/' + new_file + '"', dry)
+    c4 = simple_replace(NER_JAVA, '"' + cur_dir + '/spawn-guard.sh"', '"' + new_dir + '/spawn-guard.sh"', dry)
+    # engine/build.cjs -- output asset paths
+    c5 = simple_replace(ENGINE_BUILD, "'assets/" + cur_dir + "/" + cur_file + "'", "'assets/" + new_dir + "/" + new_file + "'", dry)
+    c6 = simple_replace(ENGINE_BUILD, "'assets/" + cur_dir + "/injector.json'", "'assets/" + new_dir + "/injector.json'", dry)
+
+    # Physical asset directory rename
+    assets_cur = ASSETS_DIR / cur_dir
+    assets_new = ASSETS_DIR / new_dir
+    if assets_cur.exists() and cur_dir != new_dir:
+        if not dry:
+            shutil.move(str(assets_cur), str(assets_new))
+        ok("asset dir:     " + cur_dir + "  ->  " + new_dir)
+    elif cur_dir == new_dir:
+        row("asset dir", cur_dir + "  (same -- no rename needed)", DIM)
+    else:
+        warn("asset dir '" + cur_dir + "' not found in " + str(ASSETS_DIR) + " (built at compile time)")
+
+    ok("agent path:    " + cur_dir + "/" + cur_file + "  ->  " + new_dir + "/" + new_file)
+    row("NER.java hits", str(c1 + c2 + c3 + c4), G)
+    row("build.cjs hits", str(c5 + c6), G)
+
 # ---- engine build ------------------------------------------------------------
 def step_build_engine():
     section("Building engine (JS agent)")
@@ -474,46 +587,69 @@ def main():
 
     # 1. Read current state
     section("Reading current configuration")
-    cur_memfd   = read_memfd_name()
-    cur_nsvar   = read_nsvar_name()
-    cur_scope   = read_scope_var()
-    cur_ctxfd   = read_ctxfd_var()
-    cur_adapter = read_adapter_tag()
-    cur_app_id  = read_app_id()
+    cur_memfd      = read_memfd_name()
+    cur_nsvar      = read_nsvar_name()
+    cur_scope      = read_scope_var()
+    cur_ctxfd      = read_ctxfd_var()
+    cur_adapter    = read_adapter_tag()
+    cur_app_id     = read_app_id()
+    cur_t_stop     = read_thread_stop()
+    cur_t_reader   = read_thread_reader()
+    cur_t_farm     = read_thread_farm()
+    cur_agent_dir  = read_agent_dir()
+    cur_agent_file = read_agent_file()
+    spawn_guard    = ASSETS_DIR / cur_agent_dir / "spawn-guard.sh"
 
-    row("memfd name    ", cur_memfd,   Y)
-    row("ns variable   ", cur_nsvar,   Y)
-    row("scope env var ", cur_scope,   Y)
-    row("ctxfd env var ", cur_ctxfd,   Y)
-    row("adapter tag   ", cur_adapter, Y)
-    row("application ID", cur_app_id,  Y)
+    row("memfd name    ", cur_memfd,      Y)
+    row("ns variable   ", cur_nsvar,      Y)
+    row("scope env var ", cur_scope,      Y)
+    row("ctxfd env var ", cur_ctxfd,      Y)
+    row("adapter tag   ", cur_adapter,    Y)
+    row("application ID", cur_app_id,     Y)
+    row("stop thread   ", cur_t_stop,     Y)
+    row("reader thread ", cur_t_reader,   Y)
+    row("farm thread   ", cur_t_farm,     Y)
+    row("agent dir     ", cur_agent_dir,  Y)
+    row("agent file    ", cur_agent_file, Y)
 
-    new_memfd   = pick_other(MEMFD_POOL,       cur_memfd)
-    new_nsvar   = pick_other(NSVAR_POOL,        cur_nsvar)
-    new_scope   = pick_other(SCOPE_VAR_POOL,    cur_scope)
-    new_ctxfd   = pick_other(CTXFD_VAR_POOL,    cur_ctxfd)
-    new_adapter = pick_other(ADAPTER_TAG_POOL,  cur_adapter)
-    new_app_id  = pick_other(APP_ID_POOL,       cur_app_id)
+    new_memfd      = pick_other(MEMFD_POOL,       cur_memfd)
+    new_nsvar      = pick_other(NSVAR_POOL,        cur_nsvar)
+    new_scope      = pick_other(SCOPE_VAR_POOL,    cur_scope)
+    new_ctxfd      = pick_other(CTXFD_VAR_POOL,    cur_ctxfd)
+    new_adapter    = pick_other(ADAPTER_TAG_POOL,  cur_adapter)
+    new_app_id     = pick_other(APP_ID_POOL,       cur_app_id)
+    new_t_stop     = pick_other(THREAD_STOP_POOL,   cur_t_stop)
+    new_t_reader   = pick_other(THREAD_READER_POOL, cur_t_reader)
+    new_t_farm     = pick_other(THREAD_FARM_POOL,   cur_t_farm)
+    new_agent_dir  = pick_other(AGENT_DIR_POOL,     cur_agent_dir)
+    new_agent_file = pick_other(AGENT_FILE_POOL,    cur_agent_file)
 
     print()
-    row("-> memfd name    ", new_memfd,   G)
-    row("-> ns variable   ", new_nsvar,   G)
-    row("-> scope env var ", new_scope,   G)
-    row("-> ctxfd env var ", new_ctxfd,   G)
-    row("-> adapter tag   ", new_adapter, G)
-    row("-> application ID", new_app_id,  G)
+    row("-> memfd name    ", new_memfd,      G)
+    row("-> ns variable   ", new_nsvar,      G)
+    row("-> scope env var ", new_scope,      G)
+    row("-> ctxfd env var ", new_ctxfd,      G)
+    row("-> adapter tag   ", new_adapter,    G)
+    row("-> application ID", new_app_id,     G)
+    row("-> stop thread   ", new_t_stop,     G)
+    row("-> reader thread ", new_t_reader,   G)
+    row("-> farm thread   ", new_t_farm,     G)
+    row("-> agent dir     ", new_agent_dir,  G)
+    row("-> agent file    ", new_agent_file, G)
 
     # 2. Apply all patches
     new_hashes = step_patch_binaries(cur_memfd, new_memfd, args.dry)
     step_patch_loader_policy(cur_memfd, new_memfd, args.dry)
     step_patch_ns_var(cur_nsvar, new_nsvar, args.dry)
-    step_patch_env_vars(cur_scope, new_scope, cur_ctxfd, new_ctxfd, args.dry)
+    step_patch_env_vars(cur_scope, new_scope, cur_ctxfd, new_ctxfd, args.dry, spawn_guard)
     step_patch_adapter_tag(cur_adapter, new_adapter, args.dry)
     if not args.no_app_id:
         step_patch_app_id(cur_app_id, new_app_id, args.dry)
     else:
         section("Application ID  [skipped by user]")
         row("application ID", cur_app_id + "  (unchanged)", DIM)
+    step_patch_thread_names(cur_t_stop, new_t_stop, cur_t_reader, new_t_reader, cur_t_farm, new_t_farm, args.dry)
+    step_patch_agent_path(cur_agent_dir, new_agent_dir, cur_agent_file, new_agent_file, args.dry)
     step_update_gradle_hashes(new_hashes, args.dry)
     step_update_strategy_hashes(new_hashes, args.dry)
 
@@ -528,6 +664,10 @@ def main():
         row("application ID ", cur_app_id  + "  ->  " + new_app_id,  G)
     else:
         row("application ID ", cur_app_id + "  (skipped)", DIM)
+    row("stop thread    ", cur_t_stop     + "  ->  " + new_t_stop,     G)
+    row("reader thread  ", cur_t_reader   + "  ->  " + new_t_reader,   G)
+    row("farm thread    ", cur_t_farm     + "  ->  " + new_t_farm,     G)
+    row("agent path     ", cur_agent_dir + "/" + cur_agent_file + "  ->  " + new_agent_dir + "/" + new_agent_file, G)
     for lib, h in new_hashes.items():
         row("  " + lib[:24], h[:20] + "...", W)
     print()
@@ -551,13 +691,17 @@ def main():
         print(C("  APK ready:"))
         print(W("  " + str(APK_OUT)))
         print()
-        row("size",       "{:.2f} MB".format(size_mb), W)
-        row("app ID",     new_app_id,  G)
-        row("memfd",      new_memfd,   G)
-        row("ns var",     new_nsvar,   G)
-        row("scope var",  new_scope,   G)
-        row("ctxfd var",  new_ctxfd,   G)
-        row("adapter",    new_adapter, G)
+        row("size",         "{:.2f} MB".format(size_mb), W)
+        row("app ID",       new_app_id,  G)
+        row("memfd",        new_memfd,   G)
+        row("ns var",       new_nsvar,   G)
+        row("scope var",    new_scope,   G)
+        row("ctxfd var",    new_ctxfd,   G)
+        row("adapter",      new_adapter, G)
+        row("stop thread",  new_t_stop,     G)
+        row("reader thread",new_t_reader,   G)
+        row("farm thread",  new_t_farm,     G)
+        row("agent path",   new_agent_dir + "/" + new_agent_file, G)
         print()
         warn("Different app ID -- uninstall previous build before installing")
     else:
