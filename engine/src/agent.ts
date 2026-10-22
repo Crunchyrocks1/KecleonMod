@@ -1352,9 +1352,11 @@ function discard(counts:Record<string,number>,bagFull:boolean):boolean {
 function tryActivateItem(counts:Record<string,number>):boolean {
   if(!activateProfileReady||activateAvailable.size===0||pending||!config.activateItemsEnabled)return false;
   const now=Date.now();
+  // Short cooldown only to prevent a double-fire before the inventory count refreshes.
+  // The real gate is count > keep: once activated the item is consumed and count drops.
   const COOLDOWNS:Record<string,number>={
-    IncenseDailyAdventure:15*60000,IncenseBelugaBox:60*60000,IncenseOrdinary:60*60000,
-    LuckyEgg:30*60000,StarPiece:30*60000,TroyDisk:30*60000
+    IncenseDailyAdventure:60000,IncenseBelugaBox:60000,IncenseOrdinary:60000,
+    LuckyEgg:60000,StarPiece:60000,TroyDisk:60000
   };
   // Diagnostic: log current counts and cooldown state for enabled items each ~60s
   if(tickCount%60===0){
