@@ -1356,6 +1356,16 @@ function tryActivateItem(counts:Record<string,number>):boolean {
     IncenseDailyAdventure:15*60000,IncenseBelugaBox:60*60000,IncenseOrdinary:60*60000,
     LuckyEgg:30*60000,StarPiece:30*60000,TroyDisk:30*60000
   };
+  // Diagnostic: log current counts and cooldown state for enabled items each ~60s
+  if(tickCount%60===0){
+    const snap:Record<string,unknown>={};
+    for(const name of Object.keys(config.activateItems)){
+      const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
+      const cd=COOLDOWNS[name]??0;
+      snap[name]={count,keep,cooldownRemainMs:Math.max(0,cd-(now-last)),ready:count>keep&&now-last>cd};
+    }
+    emit('activate_item_tick',{useItemMethod:activateUseItemMethod!==null,availableSize:activateAvailable.size,items:snap});
+  }
   function useItem(name:string,count:number,keep:number):boolean {
     if(!active(true))return false;
     try {
@@ -1422,16 +1432,24 @@ function activateItemPreflight() {
   if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0){
     activateProfileReady=true;return;
   }
-  // Prefer IItemBag.UseItem(Item) — no proto guessing needed.
   try {
     const bag=findService('Niantic.Holoholo.IItemBag');
+    // Log every method on IItemBag so we can see exactly what's callable.
+    const bagMethods=bag.class.methods.map(m=>m.name+'('+m.parameters.length+') ret='+m.returnType.name);
+    emit('activate_item_bag_methods',{methods:bagMethods});
     const m=bag.tryMethod('UseItem',1);
     if(m&&!m.isStatic&&!m.virtualAddress.isNull()){
       activateUseItemMethod=m;
-      emit('activate_item_profile',{method:'IItemBag.UseItem',available:true});
+      emit('activate_item_profile',{method:'IItemBag.UseItem',available:true,returnType:m.returnType.name});
+    } else {
+      // UseItem(1) not found — log all param-count variants of UseItem/Activate methods
+      const candidates=bag.class.methods.filter(m2=>
+        m2.name.toLowerCase().includes('use')||m2.name.toLowerCase().includes('activ'));
+      emit('activate_item_profile',{method:'IItemBag.UseItem',available:false,
+        candidates:candidates.map(m2=>m2.name+'('+m2.parameters.length+')')});
     }
   } catch(e){emit('activate_item_profile',{method:'IItemBag.UseItem',available:false,reason:String(e)});}
-  // Mark all enabled items available; tryActivateItem will catch per-item send failures.
+  // Mark all enabled items available unconditionally; per-item errors are caught in tryActivateItem.
   for(const name of Object.keys(config.activateItems))activateAvailable.add(name);
   activateProfileReady=true;
   emit('activate_item_profile',{confirmedItems:[...activateAvailable],useItemMethod:activateUseItemMethod!==null});
