@@ -33,6 +33,7 @@ import dev.rootcatch.automation.BerryOptions;
 import dev.rootcatch.automation.SessionLimits;
 import dev.rootcatch.automation.PokemonSelection;
 import dev.rootcatch.nativeengine.EnginePolicy;
+import dev.rootcatch.nativeengine.ItemCatalog;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,8 +59,9 @@ public final class MainActivity extends Activity {
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
     private LinearLayout transferOptions, cleanOptions, berryOptions;
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
-    private Button start, export, clearStatistics, items, berrySelector, pokemonSelector;
-    private String limits;
+    private Button start, export, clearStatistics, berrySelector, pokemonSelector;
+    private final java.util.LinkedHashMap<String, CheckBox> itemChecks = new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String, EditText> itemAmounts = new java.util.LinkedHashMap<>();
     private String berryOrder;
     private String onlyCatch;
     private boolean starting;
@@ -72,7 +74,6 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(AutomationConfig.PREFS, MODE_PRIVATE);
-        limits = prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS);
         berryOrder = BerryOptions.fromSavedValue(prefs.getString("berry_order", BerryOptions.DEFAULT_ORDER));
         onlyCatch = PokemonSelection.encode(PokemonSelection.parse(prefs.getString(PokemonSelection.KEY, "")));
         FarmService.restoreLast(this);
@@ -225,10 +226,7 @@ public final class MainActivity extends Activity {
         cleanOptions = column();
         cleanOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
         features.addView(cleanOptions);
-        items = rowButton(cleanOptions, "");
-        settings.add(items);
-        updateItemLabel();
-        items.setOnClickListener(view -> itemDialog());
+        buildItemRows(cleanOptions, EnginePolicy.parseLimits(prefs.getString("discard_limits", EnginePolicy.DEFAULT_LIMITS)));
 
         transfer.setOnCheckedChangeListener((view, selected) -> transferOptions.setVisibility(selected ? View.VISIBLE : View.GONE));
         clean.setOnCheckedChangeListener((view, selected) -> cleanOptions.setVisibility(selected ? View.VISIBLE : View.GONE));
@@ -347,7 +345,8 @@ public final class MainActivity extends Activity {
     }
 
     private void saveSettings() {
-        FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), limits);
+        String newLimits = buildLimitsFromUI();
+        FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), newLimits);
         if (capture.isChecked() && !throwNormal.isChecked() && !throwNice.isChecked() && !throwGreat.isChecked() && !throwExcellent.isChecked())
             throw new IllegalArgumentException("Select at least one throw quality");
         if (capture.isChecked() && useBerries.isChecked() && BerryOptions.parse(berryOrder).isEmpty())
@@ -376,7 +375,7 @@ public final class MainActivity extends Activity {
                 .putBoolean("fast_gift_opening", fastGiftOpening.isChecked())
                 .putBoolean("hide_trainer_name", hideTrainerName.isChecked())
                 .putString("trainer_name", name)
-                .putInt("max_transfers", 0).putString("discard_limits", EnginePolicy.limitsKey(limits))
+                .putInt("max_transfers", 0).putString("discard_limits", EnginePolicy.limitsKey(newLimits))
                 .putInt("max_discarded_items", 0).putInt("max_throws", 0);
         edit.putInt("max_catches", read(maxCatches, 1, Integer.MAX_VALUE, getString(R.string.maximum_catches)))
                 .putInt("max_spins", read(maxSpins, 1, Integer.MAX_VALUE, getString(R.string.maximum_spins)))
@@ -489,18 +488,65 @@ public final class MainActivity extends Activity {
         }, "rootcatch-export").start();
     }
 
-    private void itemDialog() {
-        if (FarmService.isBusy() || starting) return;
-        new SettingsDialogs(this).itemsDialog(limits, selected -> {
-            limits = selected;
-            prefs.edit().putString("discard_limits", selected).apply();
-            updateItemLabel();
-        });
+    private void buildItemRows(LinearLayout parent, java.util.Map<String, Integer> current) {
+        String lastGroup = null;
+        for (ItemCatalog.Entry entry : ItemCatalog.ENTRIES) {
+            if (!entry.discardable()) continue;
+            if (!entry.group().equals(lastGroup)) {
+                lastGroup = entry.group();
+                TextView groupLabel = text(entry.group(), 11, DIM);
+                groupLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                groupLabel.setPadding(0, dp(6), 0, dp(2));
+                parent.addView(groupLabel);
+            }
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setMinimumHeight(dp(40));
+            CheckBox cb = new CheckBox(this);
+            cb.setChecked(current.containsKey(entry.name()));
+            cb.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+            row.addView(cb);
+            TextView lbl = text(entry.label(), 13, MUTED);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+            lp.setMarginStart(dp(4));
+            row.addView(lbl, lp);
+            EditText amount = new EditText(this);
+            amount.setInputType(InputType.TYPE_CLASS_NUMBER);
+            amount.setSingleLine(true);
+            amount.setTextColor(TEXT);
+            amount.setTextSize(13);
+            amount.setText(String.valueOf(current.getOrDefault(entry.name(), 0)));
+            amount.setContentDescription("Keep " + entry.label());
+            amount.setBackground(shape(Color.argb(30, 255, 255, 255), 8));
+            amount.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            amount.setPadding(dp(4), dp(4), dp(4), dp(4));
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(dp(70), dp(36));
+            ap.setMarginStart(dp(8));
+            row.addView(amount, ap);
+            parent.addView(row);
+            itemChecks.put(entry.name(), cb);
+            itemAmounts.put(entry.name(), amount);
+            settings.add(cb);
+            settings.add(amount);
+            cb.setOnCheckedChangeListener((v, checked) -> { amount.setEnabled(checked); amount.setAlpha(checked ? 1f : 0.4f); });
+            amount.setEnabled(cb.isChecked());
+            amount.setAlpha(cb.isChecked() ? 1f : 0.4f);
+        }
     }
 
-    private void updateItemLabel() {
-        int count = EnginePolicy.parseLimits(limits).size();
-        items.setText(getResources().getQuantityString(R.plurals.item_types, count, count));
+    private String buildLimitsFromUI() {
+        StringBuilder sb = new StringBuilder();
+        for (ItemCatalog.Entry entry : ItemCatalog.ENTRIES) {
+            if (!entry.discardable()) continue;
+            CheckBox cb = itemChecks.get(entry.name());
+            EditText et = itemAmounts.get(entry.name());
+            if (cb == null || et == null || !cb.isChecked()) continue;
+            int amount = FarmPolicy.integer(et.getText().toString(), 0, 10000, entry.label());
+            if (sb.length() > 0) sb.append(',');
+            sb.append(entry.name()).append('=').append(amount);
+        }
+        return sb.toString();
     }
 
     private void updateBerryLabel() {
