@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 640" role="img" aria-labelledby="title desc">
+  <title id="title">Patch and Build pipeline</title>
+  <desc id="desc">The patcher reads the eleven current values, picks a different value for each from its pool, patches the memfd name inside both injector libraries, rewrites the matching source files, re-hashes the libraries, prints a summary (a dry run stops here), rebuilds the engine bundle and AgentBuild constants, runs Gradle assembleRelease and outputs app-release.apk.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#61e9b6"/></marker></defs>
+  <rect width="1080" height="640" rx="18" fill="#10151e"/>
+  <g font-family="Segoe UI, Arial, sans-serif" fill="#f2f7fb">
+    <text x="40" y="49" font-size="25" font-weight="700">Patch &amp; Build: a new fingerprint every build</text>
+    <text x="40" y="80" font-size="17" fill="#b5c3d1">tools/patch_build.py, run from patch_build.bat (GUI) or the command line</text>
+    <g fill="#1d2b38">
+      <rect x="40" y="120" width="300" height="120" rx="12"/><rect x="390" y="120" width="300" height="120" rx="12"/><rect x="740" y="120" width="300" height="120" rx="12"/>
+      <rect x="40" y="290" width="300" height="120" rx="12"/><rect x="390" y="290" width="300" height="120" rx="12"/><rect x="740" y="290" width="300" height="120" rx="12"/>
+      <rect x="40" y="460" width="300" height="120" rx="12"/><rect x="390" y="460" width="300" height="120" rx="12"/>
+    </g>
+    <rect x="740" y="460" width="300" height="120" rx="12" fill="#163a30" stroke="#61e9b6"/>
+    <rect x="40" y="290" width="300" height="120" rx="12" fill="none" stroke="#f0b35a" stroke-dasharray="6 5"/>
+    <g font-size="14" font-weight="700" fill="#61e9b6">
+      <text x="62" y="148">01</text><text x="412" y="148">02</text><text x="762" y="148">03</text>
+      <text x="762" y="318">04</text><text x="412" y="318">05</text><text x="62" y="318" fill="#f0b35a">06</text>
+      <text x="62" y="488">07</text><text x="412" y="488">08</text><text x="762" y="488">09</text>
+    </g>
+    <g font-size="20" font-weight="600">
+      <text x="62" y="174">Read current values</text><text x="412" y="174">Pick new values</text><text x="762" y="174">Patch native binaries</text>
+      <text x="762" y="344">Rewrite sources</text><text x="412" y="344">Re-hash libraries</text><text x="62" y="344">Summary</text>
+      <text x="62" y="514">Build engine</text><text x="412" y="514">Build APK</text><text x="762" y="514">app-release.apk</text>
+    </g>
+    <g font-size="15" fill="#d6e0ea">
+      <text x="62" y="201">11 slots found in the source tree</text><text x="62" y="223">memfd, env vars, threads, paths</text>
+      <text x="412" y="201">pick_other(pool, current)</text><text x="412" y="223">10 options each, never the same</text>
+      <text x="762" y="201">memfd name in both inject .so</text><text x="762" y="223">17-byte slot, null-padded</text>
+      <text x="762" y="371">Java, C, Gradle, shell, build.cjs</text><text x="762" y="393">Agent asset folder moved</text>
+      <text x="412" y="371">SHA-256 of each patched .so</text><text x="412" y="393">Gradle checks + ConnectionStrategy</text>
+      <text x="62" y="371">Old → new for every slot</text><text x="62" y="393" fill="#f0b35a">--dry stops here, nothing written</text>
+      <text x="62" y="541">node engine/build.cjs</text><text x="62" y="563">AgentBuild: SHA256, PATH, DIR</text>
+      <text x="412" y="541">gradlew assembleRelease</text><text x="412" y="563">Loader .so compiled from native/</text>
+      <text x="762" y="541">Debug-key fallback for signing</text><text x="762" y="563">New app ID → uninstall old build</text>
+    </g>
+  </g>
+  <g fill="none" stroke="#61e9b6" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M340 180H388"/><path d="M690 180H738"/><path d="M890 240V288"/>
+    <path d="M740 350H692"/><path d="M390 350H342"/><path d="M190 410V458"/>
+    <path d="M340 520H388"/><path d="M690 520H738"/>
+  </g>
+</svg>

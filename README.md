@@ -13,12 +13,40 @@ Private Pokémon GO automation for rooted Android (ARM64) — catches, spins, re
 
 | Version | Date | Summary |
 |---------|------|---------|
-| [**1.0.6**](#v106) | 2026-10-22 | 5 anti-detection patches · Patcher v1.4 · delay jitter · AgentBuild path-sync · crash fixes |
+| [**1.0.7**](#v107) | 2026-10-22 | Blue theme UI redesign · Kecleon header logo + app icon · compact stats · berry checkboxes |
+| [1.0.6](#v106) | 2026-10-22 | 5 anti-detection patches · Patcher v1.4 · delay jitter · AgentBuild path-sync · crash fixes |
 | [1.0.5](#v105) | 2026-10-21 | Accordion UI · multi-select throw quality · Curveball/AR Mode · Spin Gyms · auto-save fix |
 | [1.0.4](#v104) | 2026-10-21 | Patcher v1.3 · full UI redesign · separate spin/catch delays · Keep Nundo · trainer name |
 | [1.0.3](#v103) | 2026-10-21 | Patcher v1.2 · 4 new anti-detection patches · CRLF fix · hardcoded package name fix |
 | [1.0.1](#v101) | 2026-10-21 | GUI patcher · randomised anti-detection strings · SHA-256 sync · engine rebuild step |
 | [1.0.0](#v100) | 2026-10-21 | Clean SilphMod 1.9.3 base · all injection bugs fixed · first working build |
+
+---
+
+<a name="v107"></a>
+## v1.0.7 — UI Redesign + Blue Theme + Berry Checkboxes
+
+**2026-10-22 · Working**
+
+Full visual refresh to a consistent blue-dark theme, Kecleon mascot added as both the app icon and in-app header logo, compact 3-column stats layout, animated status dot, and berry selection converted from a picker dialog to inline checkboxes inside Catch Settings.
+
+### UI Changes
+
+**Blue theme** · All green was replaced with `#4493F8` across the entire UI — start button, toggles, checkboxes, accordion chevrons. Stop button stays red. Status/nav bars updated to near-black `#010409`.
+
+**Header** · Kecleon sprite (34 dp) + **KecleonMod** bold + version tag on the right — replaces the plain text bar.
+
+**Status dot** · A 6 dp dot left of the status message mirrors the current state: dim = idle, blue-green = running, amber = blocked.
+
+**Stats grid** · Was 3 rows × 2 tiles. Now 2 rows × 3 tiles — Catches / Spins / Transferred on top, Items del / XP / Stardust below. The **Clear** button moves inline with the elapsed timer, freeing space in the scroll area.
+
+**Compact rows** · Accordion headers 46 dp (was 52 dp), toggle/check rows 46 dp (was 52 dp), sub-check rows 38 dp (was 44 dp). Page and section padding tightened throughout.
+
+**App icon** · Launcher and round icon both changed to `kecleon.png`.
+
+### Berry Checkboxes
+
+Berries moved from Inventory Settings → **Catch Settings**, nested under the Catches toggle. The "X berry types" picker dialog is replaced with 5 inline checkboxes (Razz · Pinap · Nanab · Golden Razz · Golden Pinap), consistent with throw quality and item management. Berry priority order is fixed top-to-bottom; only checked berries are sent to the engine. Backward compatible with the existing `berry_order` pref string.
 
 ---
 
@@ -254,6 +282,12 @@ python tools/patch_build.py --dry  # preview only, no writes
 Output: `app/build/outputs/apk/release/app-release.apk`
 
 > `libsilph-loader.so` is compiled from `native/` each build. `librootcatch-inject.so` and `libsilph-spawn.so` are pre-built — run `python tools/prepare_native.py` to obtain them. `AgentBuild.SHA256` is auto-generated; never edit manually.
+
+### How the Patcher Works
+
+![Patch & Build pipeline](docs/patcher-pipeline.svg)
+
+![Where each patched value lands](docs/patcher-values.svg)
 
 ---
 
