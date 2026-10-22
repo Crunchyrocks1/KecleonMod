@@ -133,7 +133,7 @@ const researchQueue=new fieldResearch.ResearchQueue();
 const researchStats={claimed:0,removed:0,encounters:0};
 const services=new Map<string,HeldReference64>();
 let buddyFlow:any=null;
-let giftProfileReady=false, nextGiftAction=0;
+let giftProfileReady=false, nextGiftAction=0, giftRecipientField='';
 const giftSentFriends=new Set<string>();
 const SEND_GIFT_RPC=611;
 let rangeObserver:any=null;
@@ -1005,7 +1005,9 @@ function poll() {
         emit('encounter',{id:research.encounterId(reward),source:'FIELD_RESEARCH',questId:p.id,...researchStats});
       }
     } else if(p.kind==='gift') {
-      const status=number(result.field('Result').value);
+      const statusField=result.tryField('Result')??result.tryField('Status');
+      if(!statusField)throw Error('No result field in SendGiftOutProto response');
+      const status=number(statusField.value);
       const confirmed=status===1;
       if(!confirmed)giftSentFriends.delete(p.id);
       emit('gift_result',{friendId:p.id,status,confirmed,elapsedMs:Date.now()-p.started,
@@ -1438,19 +1440,37 @@ function giftPreflight() {
     'Niantic.Holoholo.Social.IPlayerSocialService',
   ];
   const FRIENDS_LIST_METHODS=['get_GiftableFriends','GetGiftableFriends','get_Friends','GetFriends','get_AllFriends'];
-  let pinFieldName='',stickerFieldName='';
+  const RECIPIENT_CANDIDATES=['FriendId','RecipientPlayerId','PlayerId','FriendPlayerId','ToPlayerId','RecipientId'];
+  let pinFieldName='',stickerFieldName='',recipientField='';
   try {
     const req=klass('holo-protos','Holoholo.Rpc.SendGiftProto');
     const res=klass('holo-protos','Holoholo.Rpc.SendGiftOutProto');
-    const f1=req.field('FriendId'),f2=res.field('Result');
-    if(f1.isStatic||f1.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible FriendId field');
-    if(f2.isStatic||f2.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible Result field');
+    // Enumerate fields for diagnostics and auto-detection
+    const reqFields:string[]=[],resFields:string[]=[];
+    req.fields.forEach((f:any)=>{if(!f.isStatic)reqFields.push(f.name+':'+f.type.name);});
+    res.fields.forEach((f:any)=>{if(!f.isStatic)resFields.push(f.name+':'+f.type.name);});
+    emit('gift_proto_fields',{request:reqFields,response:resFields});
+    // Try known names first, then fall back to first non-static string field
+    for(const name of RECIPIENT_CANDIDATES) {
+      const f=req.tryField(name);
+      if(f&&!f.isStatic&&f.offset>=Il2Cpp.Object.headerSize&&f.type.name==='System.String'){recipientField=name;break;}
+    }
+    if(!recipientField) {
+      req.fields.forEach((f:any)=>{
+        if(!recipientField&&!f.isStatic&&f.offset>=Il2Cpp.Object.headerSize&&f.type.name==='System.String')
+          recipientField=f.name;
+      });
+    }
+    if(!recipientField)throw Error('No recipient string field in SendGiftProto; fields: '+reqFields.join(','));
+    const f2=res.tryField('Result')??res.tryField('Status');
+    if(!f2||f2.isStatic||f2.offset<Il2Cpp.Object.headerSize)throw Error('No result/status field in SendGiftOutProto; fields: '+resFields.join(','));
     const rpc=findService('Niantic.Holoholo.Rpc.IRpcHandler').method('SendRpc',5).inflate(req,res);
     if(rpc.virtualAddress.isNull())throw Error('SendGift RPC not resolved');
     checkPromiseLayout(res,true);
     const pinF=req.tryField('PinPostcard');
     const stickerF=req.tryField('IncludeSticker')??req.tryField('AddSticker');
     pinFieldName=pinF?.name??'';stickerFieldName=stickerF?.name??'';
+    giftRecipientField=recipientField;
   }catch(error){
     emit('gift_profile',{available:false,reason:'proto_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
     return;
@@ -1474,7 +1494,7 @@ function giftPreflight() {
   }
   giftProfileReady=foundService!=='';
   emit('gift_profile',{available:giftProfileReady,service:foundService||null,
-    friendsMethod:foundMethod||null,pinFieldName:pinFieldName||null,
+    friendsMethod:foundMethod||null,recipientField,pinFieldName:pinFieldName||null,
     stickerFieldName:stickerFieldName||null,rpcId:SEND_GIFT_RPC,
     pinPostcard:config.pinPostcard,addStickers:config.addStickers,
     candidatesChecked:SERVICE_CANDIDATES.length});
@@ -1671,7 +1691,7 @@ function tryAutoSendGift(now:number):boolean {
     }
     if(!canGift)continue;
     const req=proto('SendGiftProto');
-    field(req,'FriendId',Il2Cpp.string(friendId));
+    field(req,giftRecipientField,Il2Cpp.string(friendId));
     if(config.pinPostcard){
       const pf=req.class.tryField('PinPostcard');
       if(pf&&!pf.isStatic&&pf.type.name==='System.Boolean')field(req,'PinPostcard',true);
