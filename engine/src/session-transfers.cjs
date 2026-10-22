@@ -19,8 +19,11 @@ function transferVerdict(data, options, source) {
         || options[option] === true && typeof data[field] !== 'boolean')
       return {decision:'unknown',reasons:['transfer_protection_data_invalid'],transferAllowed:false};
   }
+  if (options.keepNundo !== undefined && typeof options.keepNundo !== 'boolean')
+    return {decision:'unknown',reasons:['transfer_protection_data_invalid'],transferAllowed:false};
   if (data.shiny && options.keepShiny) reasons.push('shiny');
   if (inspected.hundo && options.keepHundo) reasons.push('hundo');
+  if (inspected.nundo && options.keepNundo) reasons.push('nundo');
   if (options.keepDynamax && data.dynamax) reasons.push('dynamax');
   if (options.keepHatched && data.hatched) reasons.push('hatched');
   if (options.keepBackground && data.background) reasons.push('background');

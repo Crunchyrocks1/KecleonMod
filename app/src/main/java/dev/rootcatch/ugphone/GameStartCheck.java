@@ -181,7 +181,7 @@ final class GameStartCheck {
                     if (++uncertain >= 2) throw new IllegalStateException("Could not verify the Pokémon GO process; export logs");
                 } else {
                     uncertain = 0;
-                    if (!allowGameStop) throw new IllegalStateException("Pokémon GO is still running; start a new session from SilphMod");
+                    if (!allowGameStop) throw new IllegalStateException("Pokémon GO is still running; start a new session from KecleonMod");
                     if (!stopIssued) {
                         journal.record("game_stop_requested", values("package", GAME, "userApproved", true,
                                 "maxStopAttempts", 1, "gameDataCleared", false, "otherAppsStopped", false));

@@ -30,7 +30,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency -- run:  pip install colorama")
 
-PATCHER_VERSION = "1.2"
+PATCHER_VERSION = "1.3"
 
 # ---- project paths -----------------------------------------------------------
 ROOT           = Path(__file__).resolve().parents[1]

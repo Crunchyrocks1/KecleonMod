@@ -9,9 +9,85 @@ Built on SilphMod 1.9.3 as the base engine — catches, spins, research, transfe
 
 | Version | Date | Tag | Summary |
 |---------|------|-----|---------|
+| [1.0.4](#v104--patcher-13--ui-redesign--new-engine-features) | 2026-10-21 | `Patcher 1.3 + UI + Engine Features` | Full KecleonMod UI redesign. Trainer name, separate spin/catch delays, Keep Nundo. Fixed LABEL crash in game-tools. |
 | [1.0.3](#v103--patcher-12--bug-fixes) | 2026-10-21 | `Patcher 1.2 + Bug Fixes` | Patcher v1.2: 4 new anti-detection patches, app ID randomisation toggle. Fixed CRLF probe crash and hardcoded package name. |
 | [1.0.1](#v101--patcher--anti-detection) | 2026-10-21 | `Patcher + Anti-Detection` | GUI patcher, randomised anti-detection strings, full SHA-256 sync, engine rebuild step. |
 | [1.0.0](#v100--base-build) | 2026-10-21 | `Base Build` | Clean SilphMod 1.9.3 base. Fixed all injection bugs. First working build. |
+
+---
+
+## v1.0.4 — Patcher 1.3 + UI Redesign + New Engine Features
+
+**Date:** 2026-10-21
+**Status:** Working
+**APK:** `app-release.apk` (signed with debug keystore)
+
+### Overview
+Full KecleonMod UI redesign with a dark pgtools-inspired theme. Complete rebrand from SilphMod to KecleonMod across all files. New engine features: separate spin and catch delays, Keep Nundo (0/0/0) transfer protection. Trainer name is now user-configurable and appears live in-game. Fixed a `ReferenceError: LABEL is not defined` crash on engine startup.
+
+---
+
+### UI Changes
+
+- **Full redesign** — dark card-based layout with stat tiles, section labels, and a status strip
+- **Removed** engine dropdown and Action Interval field
+- **Settings card** now contains: Fix Error 12, Remove Buddy, Trainer Name, Max Catches, Max Spins, Spin Delay (ms), Catch Delay (ms)
+- **Excellent throw** is now the default (was Great)
+- **Keep 0/0/0 (nundo)** checkbox added to transfer options
+
+### Trainer Name
+
+Users can now set a custom trainer label (default: `KecleonBot`). The value is shown live in the in-game HUD, profile, and friends list instead of the account name. It also appears in the notification and session logs.
+
+---
+
+### New Engine Features
+
+#### Separate Spin Delay and Catch Delay
+
+Previously a single `actionDelayMs` applied to every action. Now spins and catches have independent cooldowns:
+
+| Setting | Pref key | Default | Range | What it controls |
+|---|---|---|---|---|
+| Spin delay | `spin_delay` | 150 ms | 100–3000 ms | `nextSpin` after each spin response |
+| Catch delay | `catch_delay` | 150 ms | 100–3000 ms | `nextAction` after each catch response |
+
+All other actions (berry, discard, research, etc.) still use `actionDelayMs`.
+
+#### Keep Nundo (0/0/0)
+
+A new transfer protection for 0 Attack / 0 Defense / 0 Stamina Pokémon. Off by default. Wired end-to-end through the transfer verdict, session ledger, and preflight telemetry.
+
+---
+
+### Bug Fixed
+
+**`ReferenceError: 'LABEL' is not defined` on startup**
+
+`game-tools.cjs` had `LABEL` in `module.exports` but the variable was moved inside `install()` in a previous session — making it a dangling reference at module scope. Fixed by removing `LABEL` from the export.
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `engine/src/game-tools.cjs` | Removed `LABEL` from `module.exports`; `LABEL` now resolves inside `install()` at runtime |
+| `engine/src/agent.ts` | Config type: `spinDelayMs`, `catchDelayMs`, `keepNundo`; poll() split delays; `trainerLabel` wired |
+| `engine/src/pokemon-inspection.cjs` | `nundo` detection (0/0/0); returned in classification result |
+| `engine/src/session-transfers.cjs` | `keepNundo` option check added to `transferVerdict` |
+| `app/src/main/java/dev/rootcatch/automation/AutomationConfig.java` | `spinDelayMs`, `catchDelayMs`, `keepNundo` fields; updated constructor and `load()` |
+| `app/src/main/java/dev/rootcatch/nativeengine/TransferOptions.java` | `keepNundo` field; new constructor; `proofKey()` updated |
+| `app/src/main/java/dev/rootcatch/ugphone/FarmService.java` | Passes `keepNundo` intent extra; notification uses trainer name |
+| `app/src/main/java/dev/rootcatch/ugphone/FarmSession.java` | `spinDelayMs`, `catchDelayMs`, `keepNundo` in session record |
+| `app/src/main/java/dev/rootcatch/nativeengine/NativeEngineRunner.java` | `spinDelayMs`, `catchDelayMs`, `keepNundo` in engine JSON params; trainer label passed |
+| `app/src/main/java/dev/rootcatch/ugphone/MainActivity.java` | Full UI redesign; all new settings wired |
+| `app/src/main/AndroidManifest.xml` | App label → KecleonMod |
+| `app/src/main/res/values/styles.xml` | New dark colour palette |
+| `app/src/main/java/dev/rootcatch/ugphone/GameStartCheck.java` | SilphMod → KecleonMod |
+| `app/src/main/java/dev/rootcatch/ugphone/LogExporter.java` | SilphMod → KecleonMod in all export paths |
+| `tools/patch_build.py` | Bumped to Patcher v1.3 |
+| `patcher_gui.py` | Version label → Patcher v1.3 |
 
 ---
 

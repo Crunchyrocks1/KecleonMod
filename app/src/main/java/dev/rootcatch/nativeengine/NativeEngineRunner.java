@@ -353,7 +353,7 @@ public final class NativeEngineRunner implements Runnable {
                     .put("useBerries", config.useBerries).put("berryOrder", new org.json.JSONArray(config.berryOrder))
                     .put("skipInterruptions", config.skipInterruptions)
                     .put("showIvNames", config.showIvNames).put("extendedManualTransfer", config.extendedManualTransfer)
-                    .put("fastGiftOpening", config.fastGiftOpening).put("hideTrainerName", config.hideTrainerName)
+                    .put("fastGiftOpening", config.fastGiftOpening).put("hideTrainerName", config.hideTrainerName).put("trainerLabel", config.trainerLabel)
                     .put("fieldResearch", config.fieldResearch).put("discardUnsupportedResearch", config.discardUnsupportedResearch)
                     .put("maxCatches", captureBudget()).put("maxSpins", spinBudget())
                     .put("automaticPreflight", automaticPreflight)
@@ -363,13 +363,14 @@ public final class NativeEngineRunner implements Runnable {
                     .put("activeTrace", false)
                     .put("inspectOwned", inspectOwned)
                     .put("transferEnabled", transfers.enabled).put("keepShiny", transfers.keepShiny)
-                    .put("keepHundo", transfers.keepHundo).put("maxTransfers", transfers.maximum)
+                    .put("keepHundo", transfers.keepHundo).put("keepNundo", transfers.keepNundo).put("maxTransfers", transfers.maximum)
                     .put("keepDynamax", transfers.keepDynamax).put("keepHatched", transfers.keepHatched)
                     .put("keepBackground", transfers.keepBackground).put("keepShinyBackground", transfers.keepShinyBackground)
                     .put("keepFieldResearch", transfers.keepFieldResearch)
                     .put("maxDiscardedItems", config.maxDiscardedItems)
                     .put("cleanupTrigger", EnginePolicy.CLEANUP_TRIGGER)
-                    .put("actionDelayMs", config.actionDelayMs).put("discard", new JSONObject(limits))
+                    .put("actionDelayMs", config.actionDelayMs).put("spinDelayMs", config.spinDelayMs).put("catchDelayMs", config.catchDelayMs)
+                    .put("discard", new JSONObject(limits))
                     .put("sessionAccounting", true).put("controlRecovery", true);
             record(new JSONObject().put("event", "configuration").put("parameters", params).toString());
             prepareAssets(null);
@@ -390,7 +391,7 @@ public final class NativeEngineRunner implements Runnable {
             });
             started = SystemClock.elapsedRealtime();
             if (expectedGamePid > 1) gamePid = expectedGamePid;
-            listener.onStatus("Connecting SilphMod…");
+            listener.onStatus("Connecting KecleonMod…");
             while (!connection.earlySpawn() && !stopping && SystemClock.elapsedRealtime() - started < 90000) {
                 if (gamePid > 1) break;
                 if (focusReader.read("before_attach").focus.initialAttachAllowed()) {

@@ -24,12 +24,12 @@ final class LogExporter {
     static String export(Context context) throws Exception {
         File[] reports = FarmReports.recent(context.getFilesDir());
         if (reports.length == 0) throw new IllegalStateException("No logs yet");
-        String filename = "SilphMod_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date())
+        String filename = "KecleonMod_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date())
                 + "_" + reports[0].getName().substring(14) + ".zip";
         ContentValues values = new ContentValues();
         values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
         values.put(MediaStore.Downloads.MIME_TYPE, "application/zip");
-        values.put(MediaStore.Downloads.RELATIVE_PATH, "Download/SilphMod");
+        values.put(MediaStore.Downloads.RELATIVE_PATH, "Download/KecleonMod");
         values.put(MediaStore.Downloads.IS_PENDING, 1);
         Uri uri = context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
         if (uri == null) throw new IllegalStateException("Could not create ZIP");
@@ -50,7 +50,7 @@ final class LogExporter {
                         .put("expectedAgentSha256", FarmPolicy.EXPECTED_AGENT_SHA).put("exportTime", System.currentTimeMillis())
                         .put("sessionCount", reports.length).put("rawLogs", true).put("files", index);
                 entry(zip, "bundle-index.json", manifest.toString(2));
-                entry(zip, "README.txt", "SilphMod " + FarmPolicy.BUILD + "\n"
+                entry(zip, "README.txt", "KecleonMod " + FarmPolicy.BUILD + "\n"
                         + "Last " + reports.length + " local sessions. Manual export; no uploads.\n"
                         + "Unredacted logs may contain coordinates, IDs and other app data. Review before sharing.\n"
                         + "Rotated logs and time/size-limited sources: sources.jsonl records omissions and truncation.\n"
@@ -61,7 +61,7 @@ final class LogExporter {
             values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0);
             if (context.getContentResolver().update(uri, values, null, null) != 1)
                 throw new IllegalStateException("Could not finish ZIP");
-            return "Descargas/SilphMod/" + filename;
+            return "Descargas/KecleonMod/" + filename;
         } catch (Exception error) {
             context.getContentResolver().delete(uri, null, null);
             throw error;

@@ -43,7 +43,7 @@ class App:
                  fg=GREEN, bg=BG,
                  font=("Consolas", 15, "bold")).pack(side=tk.LEFT)
 
-        tk.Label(hdr, text="Patcher v1.2",
+        tk.Label(hdr, text="Patcher v1.3",
                  fg=GREEN, bg=BG,
                  font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(10, 0), pady=(4, 0))
 

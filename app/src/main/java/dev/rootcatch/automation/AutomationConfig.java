@@ -13,10 +13,13 @@ public final class AutomationConfig {
     public final boolean removeBuddy;
     public final boolean cleanBag;
     public final int actionDelayMs;
+    public final int spinDelayMs;
+    public final int catchDelayMs;
     public final int maxCatches;
     public final int maxSpins;
     public final int maxThrows;
     public final String throwQuality;
+    public final boolean keepNundo;
     public final boolean useBerries;
     public final java.util.List<String> berryOrder;
     public final boolean skipInterruptions;
@@ -26,15 +29,16 @@ public final class AutomationConfig {
     public final boolean extendedManualTransfer;
     public final boolean fastGiftOpening;
     public final boolean hideTrainerName;
+    public final String trainerLabel;
     public final boolean internalEngine;
     public final String discardLimits;
     public final int maxDiscardedItems;
 
     private AutomationConfig(String gamePackage,
                              boolean autoCatch, java.util.List<Integer> onlyCatch, boolean autoSpin, boolean removeBuddy,
-                             boolean cleanBag, int actionDelayMs, int maxCatches, int maxSpins,
-                             int maxThrows, String throwQuality, boolean useBerries, java.util.List<String> berryOrder,
-                             boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, boolean internalEngine,
+                             boolean cleanBag, int actionDelayMs, int spinDelayMs, int catchDelayMs, int maxCatches, int maxSpins,
+                             int maxThrows, String throwQuality, boolean keepNundo, boolean useBerries, java.util.List<String> berryOrder,
+                             boolean showIvNames, boolean extendedManualTransfer, boolean fastGiftOpening, boolean hideTrainerName, String trainerLabel, boolean internalEngine,
                              String discardLimits, int maxDiscardedItems) {
         this.gamePackage = gamePackage;
         this.autoCatch = autoCatch;
@@ -43,10 +47,13 @@ public final class AutomationConfig {
         this.removeBuddy = removeBuddy;
         this.cleanBag = cleanBag;
         this.actionDelayMs = actionDelayMs;
+        this.spinDelayMs = spinDelayMs;
+        this.catchDelayMs = catchDelayMs;
         this.maxCatches = maxCatches;
         this.maxSpins = maxSpins;
         this.maxThrows = maxThrows;
         this.throwQuality = throwQuality;
+        this.keepNundo = keepNundo;
         this.useBerries = useBerries;
         this.berryOrder = berryOrder;
         this.skipInterruptions = true;
@@ -56,6 +63,7 @@ public final class AutomationConfig {
         this.extendedManualTransfer = extendedManualTransfer;
         this.fastGiftOpening = fastGiftOpening;
         this.hideTrainerName = hideTrainerName;
+        this.trainerLabel = (trainerLabel != null && !trainerLabel.trim().isEmpty()) ? trainerLabel.trim() : "KecleonBot";
         this.internalEngine = internalEngine;
         this.discardLimits = discardLimits;
         this.maxDiscardedItems = maxDiscardedItems;
@@ -71,16 +79,20 @@ public final class AutomationConfig {
                 p.getBoolean("remove_buddy", false),
                 p.getBoolean("clean", false),
                 clamp(p.getInt("delay", 150), 100, 3000),
+                clamp(p.getInt("spin_delay", p.getInt("delay", 150)), 100, 3000),
+                clamp(p.getInt("catch_delay", p.getInt("delay", 150)), 100, 3000),
                 SessionLimits.savedLimit(p.getInt("max_catches", SessionLimits.DEFAULT_CATCHES), SessionLimits.DEFAULT_CATCHES),
                 SessionLimits.savedLimit(p.getInt("max_spins", SessionLimits.DEFAULT_SPINS), SessionLimits.DEFAULT_SPINS),
                 0,
-                ThrowQuality.fromSavedValue(p.getString("throw_quality", "GREAT")).name(),
+                ThrowQuality.fromSavedValue(p.getString("throw_quality", "EXCELLENT")).name(),
+                p.getBoolean("keep_nundo", false),
                 p.getBoolean("use_berries", true),
                 BerryOptions.parse(BerryOptions.fromSavedValue(p.getString("berry_order", BerryOptions.DEFAULT_ORDER))),
                 p.getBoolean("show_iv_names", true),
                 p.getBoolean("extended_manual_transfer", false),
                 p.getBoolean("fast_gift_opening", true),
                 p.getBoolean("hide_trainer_name", true),
+                p.getString("trainer_name", "KecleonBot"),
                 p.getBoolean("internal_engine", true),
                 p.getString("discard_limits", dev.rootcatch.nativeengine.EnginePolicy.DEFAULT_LIMITS),
                 0

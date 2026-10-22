@@ -57,14 +57,14 @@ import capturePlanning from './capture-planning.cjs';
 type Obj = Il2Cpp.Object;
 type Location = {latitude:number; longitude:number};
 type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; cleanBag:boolean; readOnly:boolean;
-  maxThrows:number; actionDelayMs:number; maxCatches:number;maxSpins:number;discard:Record<string,number>; gamePackage:string;
+  maxThrows:number; actionDelayMs:number; spinDelayMs:number; catchDelayMs:number; maxCatches:number;maxSpins:number;discard:Record<string,number>; gamePackage:string;
   diagnosticTrace:boolean;activeTrace:boolean;encounterOnly:boolean;inspectOwned:boolean;transferEnabled:boolean;
-  keepShiny:boolean;keepHundo:boolean;keepDynamax:boolean;keepHatched:boolean;keepBackground:boolean;keepShinyBackground:boolean;keepFieldResearch:boolean;
+  keepShiny:boolean;keepHundo:boolean;keepNundo:boolean;keepDynamax:boolean;keepHatched:boolean;keepBackground:boolean;keepShinyBackground:boolean;keepFieldResearch:boolean;
   maxTransfers:number;sessionId:string;maxDiscardedItems:number;expectedPlayerId:string;
   automaticPreflight:boolean;sessionAccounting:boolean;controlRecovery:boolean;
   throwQuality:string;notificationShadeSupport:boolean;useBerries:boolean;berryOrder:string[];skipInterruptions:boolean;
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
-  fastGiftOpening:boolean;hideTrainerName:boolean};
+  fastGiftOpening:boolean;hideTrainerName:boolean;trainerLabel:string};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
 type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
@@ -564,7 +564,7 @@ function transferPreflight() {
   // No collection scan or restored queue: only issued, successful captures can grant scope.
   emit('transfer_scope',{mode:'CURRENT_SESSION_CAPTURE_RESPONSES',sessionId:config.sessionId,
     existingCollectionScan:false,queuePersisted:false,queueEmpty:true,transferRequestsSent:0});
-  emit('transfer_preflight',{passed:true,keepShiny:config.keepShiny,keepHundo:config.keepHundo,
+  emit('transfer_preflight',{passed:true,keepShiny:config.keepShiny,keepHundo:config.keepHundo,keepNundo:config.keepNundo,
     keepDynamax:config.keepDynamax,keepHatched:config.keepHatched,keepBackground:config.keepBackground,
     keepShinyBackground:config.keepShinyBackground,keepFieldResearch:config.keepFieldResearch,maxTransfers:config.maxTransfers,transferRequestsSent:0});
 }
@@ -615,7 +615,7 @@ function tryTransfer(id:string,encounterId:string) {
     const source=transferLedger.captureSource(id,encounterId);
     const verdict=transferPolicy.transferVerdict(data,config,source);
     emit('transfer_decision',{origin:'session',encounterId,source,...data,...verdict,
-      keepShiny:config.keepShiny,keepHundo:config.keepHundo,keepDynamax:config.keepDynamax,
+      keepShiny:config.keepShiny,keepHundo:config.keepHundo,keepNundo:config.keepNundo,keepDynamax:config.keepDynamax,
       keepHatched:config.keepHatched,keepBackground:config.keepBackground,keepShinyBackground:config.keepShinyBackground,
       keepFieldResearch:config.keepFieldResearch});
     if(!verdict.transferAllowed) {transferLedger.finish(id,false);return;}
@@ -1001,7 +1001,8 @@ function poll() {
     }
     // Minimum spacing is measured from the request, not added again after its reply.
     if(reportSessionLimits())return;
-    nextAction=Math.max(nextAction,p.started+config.actionDelayMs);
+    if(p.kind==='spin') nextSpin=Math.max(nextSpin,p.started+config.spinDelayMs);
+    else nextAction=Math.max(nextAction,p.started+(p.kind==='capture'?config.catchDelayMs:config.actionDelayMs));
   } catch(error) {
     if(!(error instanceof ResearchProfileError))throw error;
     researchQueue.uncertain(p.kind,p.id,Date.now());
@@ -1586,15 +1587,18 @@ function init(_stage:string,parameters:any) {
     onlyCatch:catchSelection.read(parameters.onlyCatch),
     cleanBag:!!parameters.cleanBag,readOnly:!!parameters.readOnly,...sessionLimits.read(parameters),
     maxThrows:parameters.maxThrows===0?0:Math.min(10,Math.max(1,parameters.maxThrows|0)),
-    actionDelayMs:Math.min(3000,Math.max(100,parameters.actionDelayMs|0)),discard:parameters.discard??{},
+    actionDelayMs:Math.min(3000,Math.max(100,parameters.actionDelayMs|0)),
+    spinDelayMs:Math.min(3000,Math.max(100,(parameters.spinDelayMs??parameters.actionDelayMs)|0)),
+    catchDelayMs:Math.min(3000,Math.max(100,(parameters.catchDelayMs??parameters.actionDelayMs)|0)),
+    discard:parameters.discard??{},
     diagnosticTrace:parameters.diagnosticTrace===true,activeTrace:parameters.activeTrace!==false,encounterOnly:parameters.encounterOnly===true,
     inspectOwned:parameters.inspectOwned===true||parameters.transferEnabled===true,
     transferEnabled:parameters.transferEnabled===true,keepShiny:parameters.keepShiny!==false,
-    keepHundo:parameters.keepHundo!==false,keepDynamax:parameters.keepDynamax===true,keepHatched:parameters.keepHatched===true,
+    keepHundo:parameters.keepHundo!==false,keepNundo:parameters.keepNundo===true,keepDynamax:parameters.keepDynamax===true,keepHatched:parameters.keepHatched===true,
     keepBackground:parameters.keepBackground===true,keepShinyBackground:parameters.keepShinyBackground===true,
     keepFieldResearch:parameters.keepFieldResearch!==false,
     showIvNames:parameters.showIvNames===true,extendedManualTransfer:parameters.extendedManualTransfer===true,
-    fastGiftOpening:parameters.fastGiftOpening===true,hideTrainerName:parameters.hideTrainerName===true,
+    fastGiftOpening:parameters.fastGiftOpening===true,hideTrainerName:parameters.hideTrainerName===true,trainerLabel:typeof parameters.trainerLabel==='string'&&parameters.trainerLabel.trim()!==''?parameters.trainerLabel.trim():'KecleonBot',
     removeBuddy:parameters.removeBuddy===true,
     maxTransfers:parameters.maxTransfers??0,sessionId:parameters.sessionId,
     maxDiscardedItems:parameters.maxDiscardedItems??0,expectedPlayerId:parameters.expectedPlayerId??'',

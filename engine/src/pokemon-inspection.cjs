@@ -10,13 +10,15 @@ function classifyPokemon(data) {
     && ['shiny','favorite','egg','deployed'].every(key => typeof data[key] === 'boolean');
   if (!valid) return {decision:'unknown',reasons:['missing_or_invalid_data'],transferAllowed:false};
   const hundo = data.attack === 15 && data.defense === 15 && data.stamina === 15;
+  const nundo = data.attack === 0 && data.defense === 0 && data.stamina === 0;
   if (data.shiny) reasons.push('shiny');
   if (hundo) reasons.push('hundo');
+  if (nundo) reasons.push('nundo');
   if (data.favorite) reasons.push('favorite');
   if (data.egg) reasons.push('egg');
   if (data.deployed) reasons.push('deployed');
   return {decision:reasons.length ? 'retain' : 'review', reasons:reasons.length ? reasons : ['non_shiny_non_hundo'],
-    hundo,shundo:hundo && data.shiny,ivPercent:Math.floor((data.attack+data.defense+data.stamina)*100/45),
+    hundo,nundo,shundo:hundo && data.shiny,ivPercent:Math.floor((data.attack+data.defense+data.stamina)*100/45),
     transferAllowed:false,unvalidatedProtections:['buddy','special_class','species_exceptions']};
 }
 module.exports = {ownedId,classifyPokemon};

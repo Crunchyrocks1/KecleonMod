@@ -108,7 +108,7 @@ public final class FarmService extends Service {
         super.onCreate();
         restoreLast(this);
         getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(CHANNEL,
-                "SilphMod service", NotificationManager.IMPORTANCE_LOW));
+                "KecleonMod service", NotificationManager.IMPORTANCE_LOW));
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) { if (!running) stopSelf(); return START_NOT_STICKY; }
@@ -133,7 +133,8 @@ public final class FarmService extends Service {
             transfers = new TransferOptions(intent.getBooleanExtra("transfer", false), intent.getBooleanExtra("keepShiny", true),
                     intent.getBooleanExtra("keepHundo", true), intent.getBooleanExtra("keepDynamax", true),
                     intent.getBooleanExtra("keepHatched", true), intent.getBooleanExtra("keepBackground", true),
-                    intent.getBooleanExtra("keepShinyBackground", false), intent.getBooleanExtra("keepFieldResearch", true), 0);
+                    intent.getBooleanExtra("keepShinyBackground", false), intent.getBooleanExtra("keepFieldResearch", true),
+                    intent.getBooleanExtra("keepNundo", false), 0);
             FarmPolicy.validate(config.autoCatch, config.autoSpin, config.cleanBag, transfers.enabled, config.discardLimits);
             String block = limitBlock();
             if (!block.isEmpty()) throw new IllegalArgumentException(block);
@@ -147,7 +148,7 @@ public final class FarmService extends Service {
         approvedGameStop = intent.getBooleanExtra("userApprovedGameStop", false)
                 && "USER_START_BUTTON".equals(intent.getStringExtra("startupAuthorization"));
         status = "Preparing…"; cleanupNote = ""; update(true);
-        wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SilphMod:Farm");
+        wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KecleonMod:Farm");
         wakeLock.setReferenceCounted(false); wakeLock.acquire(120_000L);
         nextWakeRenew = SystemClock.elapsedRealtime() + 60_000;
         startCycle(false, "");
@@ -265,7 +266,7 @@ public final class FarmService extends Service {
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, FarmService.class).setAction(STOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("SilphMod · " + "Farmer" + " · " + (running ? status : "Finished"))
+                .setContentTitle("KecleonMod · " + getSharedPreferences(dev.rootcatch.automation.AutomationConfig.PREFS, MODE_PRIVATE).getString("trainer_name", "KecleonBot") + " · " + (running ? status : "Finished"))
                 .setContentText(counters.compact()).setContentIntent(open).setOnlyAlertOnce(true)
                 .setSubText(counters.rewardLine())
                 .setStyle(new Notification.BigTextStyle().bigText(counters.compact() + "\n" + (counters.rewardLine())

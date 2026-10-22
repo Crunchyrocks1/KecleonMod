@@ -7,7 +7,7 @@ const GIFT='Niantic.Holoholo.Social.Gifting.UI.OpenGiftGuiController';
 const STAGE='Niantic.Holoholo.Social.Gifting.UI.GiftBoxStage';
 const REWARDS='Niantic.Holoholo.UI.MajorRewardSequenceView';
 const WAIT='Niantic.Zeppelin.Scheduler.Wait';
-const LABEL='SilphMod',MAX_RECORDS=48,ANIMATION_SPEED=12,OPEN_SECONDS=0.05;
+const MAX_RECORDS=48,ANIMATION_SPEED=12,OPEN_SECONDS=0.05;
 
 function method(type,name,parameters,result) {
   const value=type.tryMethod(name,parameters.length);
@@ -23,6 +23,7 @@ function field(type,name,expected) {
   return value;
 }
 function install(runtime,options,report) {
+  const LABEL=(options.trainerLabel&&options.trainerLabel.trim()!==''?options.trainerLabel.trim():'KecleonBot');
   const hooks=[],records=new Map(),errors=[];
   let closed=false,names=false,gifts=false,operations=0,giftDepth=0;
   let labelReference=null,nameUpdates=0,giftOpens=0,animations=0,giftWaits=0,savedWaitSeconds=0,failures=0;
@@ -188,4 +189,4 @@ function install(runtime,options,report) {
   }
   return {primeHud,snapshot,close,get busy(){return operations>0||giftDepth>0;},get needsUnityCleanup(){return records.size>0;}};
 }
-module.exports={install,HUD,PROFILE,FRIENDS,GIFT,STAGE,REWARDS,WAIT,LABEL,MAX_RECORDS,ANIMATION_SPEED,OPEN_SECONDS};
+module.exports={install,HUD,PROFILE,FRIENDS,GIFT,STAGE,REWARDS,WAIT,MAX_RECORDS,ANIMATION_SPEED,OPEN_SECONDS};
