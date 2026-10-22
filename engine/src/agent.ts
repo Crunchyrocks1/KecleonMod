@@ -1394,6 +1394,13 @@ function tryActivateItem(counts:Record<string,number>):boolean {
         }
         catch(fe){emit('activate_item_field_warn',{name,field:fld,error:String(fe)});}
       }
+      // Diagnostic: read back every set field as raw int32 to confirm wire values.
+      const wireInts:Record<string,number>={};
+      for(const fname of [entry[2],...(entry[4]?Object.keys(entry[4]):[])]) {
+        try{const fd=request.class.field(fname);wireInts[fname]=request.handle.add(fd.offset).readS32();}
+        catch{}
+      }
+      emit('activate_item_wire',{name,proto:entry[1],rpc:entry[0],ints:wireInts});
       const promise=sendRpc(entry[0],request,entry[3]);
       reserve('activate_item',promise,name,[request]);
       lastActivated.set(name,now);
