@@ -57,9 +57,10 @@ public final class MainActivity extends Activity {
     private CheckBox keepShiny, keepHundo, keepNundo, keepDynamax, keepHatched, keepBackground, keepShinyBackground, keepFieldResearch, resolveError12, removeBuddy;
     private CheckBox throwNormal, throwNice, throwGreat, throwExcellent, curveball, arMode;
     private EditText maxCatches, maxSpins, spinDelay, catchDelay, trainerName;
-    private LinearLayout transferOptions, cleanOptions, berryOptions;
+    private LinearLayout transferOptions, cleanOptions;
     private TextView status, elapsed, caught, spun, transferred, discarded, xp, stardust;
-    private Button start, export, clearStatistics, berrySelector, pokemonSelector;
+    private Button start, export, clearStatistics, pokemonSelector;
+    private CheckBox berryRazz, berryPinap, berryNanab, berryGoldenRazz, berryGoldenPinap;
     private final java.util.LinkedHashMap<String, CheckBox> itemChecks = new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String, EditText> itemAmounts = new java.util.LinkedHashMap<>();
     private String berryOrder;
@@ -158,7 +159,9 @@ public final class MainActivity extends Activity {
         // ── Catch Settings ────────────────────────────────────────────────────
         LinearLayout catchBody = accordion(page, "Catch Settings", "section_catch");
         capture = toggleRow(catchBody, "Catches", prefs.getBoolean("catch", true));
-        pokemonSelector = rowButton(catchBody, "");
+        LinearLayout captureSubOptions = column();
+        catchBody.addView(captureSubOptions);
+        pokemonSelector = rowButton(captureSubOptions, "");
         settings.add(pokemonSelector);
         updatePokemonLabel();
         pokemonSelector.setOnClickListener(view -> {
@@ -171,19 +174,28 @@ public final class MainActivity extends Activity {
         });
         LinearLayout throwOptions = column();
         throwOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
-        catchBody.addView(throwOptions);
+        captureSubOptions.addView(throwOptions);
         throwNormal    = subCheck(throwOptions, "Normal throw",    prefs.getBoolean("throw_normal",    false));
         throwNice      = subCheck(throwOptions, "Nice throw",      prefs.getBoolean("throw_nice",      false));
         throwGreat     = subCheck(throwOptions, "Great throw",     prefs.getBoolean("throw_great",     false));
         throwExcellent = subCheck(throwOptions, "Excellent throw", prefs.getBoolean("throw_excellent", true));
         curveball      = subCheck(throwOptions, "Curveball",       prefs.getBoolean("curveball",       true));
         arMode         = subCheck(throwOptions, "AR Mode",         prefs.getBoolean("ar_mode",         false));
-        capture.setOnCheckedChangeListener((v, checked) -> {
-            pokemonSelector.setVisibility(checked ? View.VISIBLE : View.GONE);
-            throwOptions.setVisibility(checked ? View.VISIBLE : View.GONE);
-        });
-        pokemonSelector.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
-        throwOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
+        divider(captureSubOptions);
+        useBerries = toggleRow(captureSubOptions, getString(R.string.use_berries), prefs.getBoolean("use_berries", true));
+        LinearLayout berrySubOptions = column();
+        berrySubOptions.setPadding(dp(14), dp(4), dp(14), dp(8));
+        captureSubOptions.addView(berrySubOptions);
+        List<String> savedBerries = BerryOptions.parse(berryOrder);
+        berryRazz        = subCheck(berrySubOptions, "Razz Berry",         savedBerries.contains("RazzBerry"));
+        berryPinap       = subCheck(berrySubOptions, "Pinap Berry",        savedBerries.contains("PinapBerry"));
+        berryNanab       = subCheck(berrySubOptions, "Nanab Berry",        savedBerries.contains("NanabBerry"));
+        berryGoldenRazz  = subCheck(berrySubOptions, "Golden Razz Berry",  savedBerries.contains("GoldenRazzBerry"));
+        berryGoldenPinap = subCheck(berrySubOptions, "Golden Pinap Berry", savedBerries.contains("GoldenPinapBerry"));
+        useBerries.setOnCheckedChangeListener((view, checked) -> berrySubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        berrySubOptions.setVisibility(useBerries.isChecked() ? View.VISIBLE : View.GONE);
+        capture.setOnCheckedChangeListener((v, checked) -> captureSubOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
+        captureSubOptions.setVisibility(capture.isChecked() ? View.VISIBLE : View.GONE);
         divider(catchBody);
         catchDelay = numericRow(catchBody, "Catch delay (ms)",
                 Math.max(100, Math.min(3000, prefs.getInt("catch_delay", 150))));
@@ -227,23 +239,6 @@ public final class MainActivity extends Activity {
 
         // ── Inventory Settings ────────────────────────────────────────────────
         LinearLayout inventoryBody = accordion(page, "Inventory Settings", "section_inventory");
-        useBerries = toggleRow(inventoryBody, getString(R.string.use_berries), prefs.getBoolean("use_berries", true));
-        berryOptions = column();
-        inventoryBody.addView(berryOptions);
-        berrySelector = rowButton(berryOptions, "");
-        settings.add(berrySelector);
-        updateBerryLabel();
-        berrySelector.setOnClickListener(view -> {
-            if (FarmService.isBusy() || starting) return;
-            new SettingsDialogs(this).berriesDialog(berryOrder, selected -> {
-                berryOrder = selected;
-                prefs.edit().putString("berry_order", selected).apply();
-                updateBerryLabel();
-            });
-        });
-        useBerries.setOnCheckedChangeListener((view, checked) -> berryOptions.setVisibility(checked ? View.VISIBLE : View.GONE));
-        berryOptions.setVisibility(useBerries.isChecked() ? View.VISIBLE : View.GONE);
-        divider(inventoryBody);
         showIvNames            = toggleRow(inventoryBody, "Show IV names",            prefs.getBoolean("show_iv_names",            true));
         divider(inventoryBody);
         extendedManualTransfer = toggleRow(inventoryBody, "Extended manual transfer", prefs.getBoolean("extended_manual_transfer", false));
@@ -341,7 +336,7 @@ public final class MainActivity extends Activity {
         FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), newLimits);
         if (capture.isChecked() && !throwNormal.isChecked() && !throwNice.isChecked() && !throwGreat.isChecked() && !throwExcellent.isChecked())
             throw new IllegalArgumentException("Select at least one throw quality");
-        if (capture.isChecked() && useBerries.isChecked() && BerryOptions.parse(berryOrder).isEmpty())
+        if (capture.isChecked() && useBerries.isChecked() && buildBerryOrderFromUI().isEmpty())
             throw new IllegalArgumentException(getString(R.string.select_berries));
         persistSettings();
     }
@@ -360,7 +355,7 @@ public final class MainActivity extends Activity {
                 .putBoolean("curveball", curveball.isChecked())
                 .putBoolean("ar_mode", arMode.isChecked())
                 .putString(PokemonSelection.KEY, onlyCatch)
-                .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", berryOrder)
+                .putBoolean("use_berries", useBerries.isChecked()).putString("berry_order", buildBerryOrderFromUI())
                 .putBoolean("catch", capture.isChecked()).putBoolean("spin", spin.isChecked()).putBoolean("spin_gyms", spinGyms.isChecked()).putBoolean("clean", clean.isChecked())
                 .putBoolean("resolve_error_12", resolveError12.isChecked())
                 .putBoolean("remove_buddy", removeBuddy.isChecked())
@@ -543,9 +538,14 @@ public final class MainActivity extends Activity {
         return sb.toString();
     }
 
-    private void updateBerryLabel() {
-        int count = BerryOptions.parse(berryOrder).size();
-        berrySelector.setText(getResources().getQuantityString(R.plurals.berry_types, count, count));
+    private String buildBerryOrderFromUI() {
+        List<String> result = new ArrayList<>();
+        if (berryRazz        != null && berryRazz.isChecked())        result.add("RazzBerry");
+        if (berryPinap       != null && berryPinap.isChecked())       result.add("PinapBerry");
+        if (berryNanab       != null && berryNanab.isChecked())       result.add("NanabBerry");
+        if (berryGoldenRazz  != null && berryGoldenRazz.isChecked())  result.add("GoldenRazzBerry");
+        if (berryGoldenPinap != null && berryGoldenPinap.isChecked()) result.add("GoldenPinapBerry");
+        return String.join(",", result);
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
