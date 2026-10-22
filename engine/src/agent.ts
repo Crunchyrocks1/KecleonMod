@@ -1350,7 +1350,7 @@ function discard(counts:Record<string,number>,bagFull:boolean):boolean {
   return true;
 }
 function tryActivateItem(counts:Record<string,number>):boolean {
-  if(!activateProfileReady||pending||!config.activateItemsEnabled)return false;
+  if(!activateProfileReady||activateAvailable.size===0||pending||!config.activateItemsEnabled)return false;
   const now=Date.now();
   const COOLDOWNS:Record<string,number>={
     IncenseDailyAdventure:15*60000,IncenseBelugaBox:60*60000,IncenseOrdinary:60*60000,
@@ -1360,7 +1360,7 @@ function tryActivateItem(counts:Record<string,number>):boolean {
   const incensePriority=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
   let incenseDone=false;
   for(const name of incensePriority){
-    if(!(name in config.activateItems))continue;
+    if(!(name in config.activateItems)||!activateAvailable.has(name))continue;
     const keep=config.activateItems[name];
     const count=counts[name]??0;
     const last=lastActivated.get(name)??0;
@@ -1382,7 +1382,7 @@ function tryActivateItem(counts:Record<string,number>):boolean {
   // Lucky Egg (independent of incense)
   {
     const name='LuckyEgg';
-    if(name in config.activateItems){
+    if(name in config.activateItems&&activateAvailable.has(name)){
       const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
       if(count>keep&&now-last>COOLDOWNS[name]){
         if(!active(true))return false;
@@ -1401,7 +1401,7 @@ function tryActivateItem(counts:Record<string,number>):boolean {
   // Star Piece
   {
     const name='StarPiece';
-    if(name in config.activateItems){
+    if(name in config.activateItems&&activateAvailable.has(name)){
       const keep=config.activateItems[name],count=counts[name]??0,last=lastActivated.get(name)??0;
       if(count>keep&&now-last>COOLDOWNS[name]){
         if(!active(true))return false;
@@ -1419,38 +1419,40 @@ function tryActivateItem(counts:Record<string,number>):boolean {
   }
   return false;
 }
+// Tracks which item types have confirmed proto availability.
+const activateAvailable=new Set<string>();
 function activateItemPreflight() {
-  if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0)return;
+  if(!config.activateItemsEnabled||Object.keys(config.activateItems).length===0){
+    activateProfileReady=true;return;
+  }
   const incenseItems=['IncenseDailyAdventure','IncenseBelugaBox','IncenseOrdinary'];
-  const hasIncense=incenseItems.some(name=>name in config.activateItems);
-  const hasLuckyEgg='LuckyEgg' in config.activateItems;
-  const hasStarPiece='StarPiece' in config.activateItems;
-  findService('Niantic.Holoholo.Rpc.IRpcHandler');
-  if(hasIncense){
-    const proto=klass('holo-protos','Holoholo.Rpc.UseIncenseProto');
-    proto.field('IncenseType');
-    const resp=klass('holo-protos','Holoholo.Rpc.UseIncenseOutProto');
-    resp.field('Result');
-    checkPromiseLayout(resp,true);
-  }
-  if(hasLuckyEgg){
-    const proto=klass('holo-protos','Holoholo.Rpc.UseItemXpBoostProto');
-    proto.field('ItemId');
-    const resp=klass('holo-protos','Holoholo.Rpc.UseItemXpBoostOutProto');
-    resp.field('Result');
-    checkPromiseLayout(resp,true);
-  }
-  if(hasStarPiece){
+  // Each block is independently try/catched — one missing proto never breaks another item type.
+  if(incenseItems.some(name=>name in config.activateItems)){
     try {
-      const proto=klass('holo-protos','Holoholo.Rpc.UseItemStarPieceProto');
-      proto.field('ItemId');
-      const resp=klass('holo-protos','Holoholo.Rpc.UseItemStarPieceOutProto');
-      resp.field('Result');
-      checkPromiseLayout(resp,true);
-    } catch { emit('activate_item_profile',{starPiece:false,reason:'proto_unavailable'}); }
+      klass('holo-protos','Holoholo.Rpc.UseIncenseProto').field('IncenseType');
+      klass('holo-protos','Holoholo.Rpc.UseIncenseOutProto').field('Result');
+      for(const n of incenseItems)if(n in config.activateItems)activateAvailable.add(n);
+      emit('activate_item_profile',{type:'incense',available:true});
+    } catch(e){emit('activate_item_profile',{type:'incense',available:false,reason:String(e)});}
+  }
+  if('LuckyEgg' in config.activateItems){
+    try {
+      klass('holo-protos','Holoholo.Rpc.UseItemXpBoostProto').field('ItemId');
+      klass('holo-protos','Holoholo.Rpc.UseItemXpBoostOutProto').field('Result');
+      activateAvailable.add('LuckyEgg');
+      emit('activate_item_profile',{type:'luckyEgg',available:true});
+    } catch(e){emit('activate_item_profile',{type:'luckyEgg',available:false,reason:String(e)});}
+  }
+  if('StarPiece' in config.activateItems){
+    try {
+      klass('holo-protos','Holoholo.Rpc.UseItemStarPieceProto').field('ItemId');
+      klass('holo-protos','Holoholo.Rpc.UseItemStarPieceOutProto').field('Result');
+      activateAvailable.add('StarPiece');
+      emit('activate_item_profile',{type:'starPiece',available:true});
+    } catch(e){emit('activate_item_profile',{type:'starPiece',available:false,reason:String(e)});}
   }
   activateProfileReady=true;
-  emit('activate_item_profile',{available:true,enabledItems:Object.keys(config.activateItems)});
+  emit('activate_item_profile',{available:activateAvailable.size>0,confirmedItems:[...activateAvailable]});
 }
 function checkPromiseLayout(response:Il2Cpp.Class,isRpc=false) {
   enterStage('preflight:promise:'+response.fullName);
