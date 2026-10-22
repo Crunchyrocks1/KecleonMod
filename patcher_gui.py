@@ -43,10 +43,13 @@ class App:
                  fg=GREEN, bg=BG,
                  font=("Consolas", 15, "bold")).pack(side=tk.LEFT)
 
-        self.ver_lbl = tk.Label(hdr, text="v1.9.3",
-                                fg=DIM, bg=BG,
-                                font=("Consolas", 10))
-        self.ver_lbl.pack(side=tk.LEFT, padx=(8, 0), pady=(4, 0))
+        tk.Label(hdr, text="Patcher v1.2",
+                 fg=GREEN, bg=BG,
+                 font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(10, 0), pady=(4, 0))
+
+        tk.Label(hdr, text="| APK v1.9.3",
+                 fg=DIM, bg=BG,
+                 font=("Consolas", 10)).pack(side=tk.LEFT, padx=(6, 0), pady=(4, 0))
 
         # ── log ─────────────────────────────────────────────────────────────
         self.log = scrolledtext.ScrolledText(
@@ -98,6 +101,23 @@ class App:
             relief=tk.FLAT, padx=10, pady=6,
             cursor="hand2", activebackground="#333333",
         ).pack(side=tk.LEFT, padx=6)
+
+        # ── options row ──────────────────────────────────────────────────────
+        opt_row = tk.Frame(self.root, bg=BG)
+        opt_row.pack(pady=(0, 6))
+
+        self.rand_app_id = tk.BooleanVar(value=False)
+        cb = tk.Checkbutton(
+            opt_row,
+            text="Randomise App ID  (requires uninstall of previous build)",
+            variable=self.rand_app_id,
+            bg=BG, fg=DIM,
+            selectcolor="#2a2a2a",
+            activebackground=BG, activeforeground=FG,
+            font=("Consolas", 9),
+            cursor="hand2",
+        )
+        cb.pack(side=tk.LEFT)
 
         # ── status bar ───────────────────────────────────────────────────────
         self.status_var = tk.StringVar(value="Ready  --  press Patch & Build to start")
@@ -151,6 +171,8 @@ class App:
             cmd = [sys.executable, str(SCRIPT)]
             if dry:
                 cmd.append("--dry")
+            if not self.rand_app_id.get():
+                cmd.append("--no-app-id")
             try:
                 proc = subprocess.Popen(
                     cmd, cwd=str(ROOT),

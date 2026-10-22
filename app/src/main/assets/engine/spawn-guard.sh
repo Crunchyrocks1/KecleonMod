@@ -22,7 +22,7 @@ if ! awk '($5 == "/" || $5 == "/sys/fs/selinux") && / shared:/ { unsafe = 1 } EN
 fi
 if [ "$silph_probe" = 0 ] && [ -w /sys/fs/selinux/context ]; then
     exec 9<> /sys/fs/selinux/context
-    export SILPH_LOADER_CONTEXT_FD=9
+    export ART_SELINUX_FD=9
 fi
 if [ -d /sys/fs/selinux ]; then
     mount -t tmpfs -o ro,nosuid,nodev,noexec,size=4k silph-policy-view /sys/fs/selinux
@@ -41,12 +41,12 @@ if [ ! -f "$silph_loader" ]; then
     printf '%s\n' 'SILPH_GUARD_ERROR=loader_missing' >&2
     exit 93
 fi
-export SILPH_LOADER_SCOPE=com.nianticlabs.pokemongo
+export PROC_LOADER_CTX=com.nianticlabs.pokemongo
 export LD_PRELOAD="$silph_loader"
 printf 'ROOTCATCH_HELPER_PID=%s\n' "$$"
 printf '%s\n' 'SILPH_POLICY_WRITE_GUARD=isolated_mount_namespace'
 shift 4
-if [ "${SILPH_LOADER_CONTEXT_FD:-}" = 9 ]; then
+if [ "${ART_SELINUX_FD:-}" = 9 ]; then
     exec "$silph_binary" "$@" 9<&9
 else
     exec "$silph_binary" "$@"

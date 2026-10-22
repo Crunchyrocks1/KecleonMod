@@ -9,8 +9,100 @@ Built on SilphMod 1.9.3 as the base engine — catches, spins, research, transfe
 
 | Version | Date | Tag | Summary |
 |---------|------|-----|---------|
+| [1.0.3](#v103--patcher-12--bug-fixes) | 2026-10-21 | `Patcher 1.2 + Bug Fixes` | Patcher v1.2: 4 new anti-detection patches, app ID randomisation toggle. Fixed CRLF probe crash and hardcoded package name. |
 | [1.0.1](#v101--patcher--anti-detection) | 2026-10-21 | `Patcher + Anti-Detection` | GUI patcher, randomised anti-detection strings, full SHA-256 sync, engine rebuild step. |
 | [1.0.0](#v100--base-build) | 2026-10-21 | `Base Build` | Clean SilphMod 1.9.3 base. Fixed all injection bugs. First working build. |
+
+---
+
+## v1.0.3 — Patcher 1.2 + Bug Fixes
+
+**Date:** 2026-10-21
+**Status:** Working
+**APK:** `app-release.apk` (signed with debug keystore)
+
+### Overview
+Upgrades the patcher to v1.2 with four new anti-detection patches (loader env var names, adapter tag, application ID toggle), fixes a critical CRLF bug that caused "Engine: Injector isolation unavailable" on every v1.1 build, and fixes a hardcoded package name that blocked the Fix Error 12 feature after app ID randomisation.
+
+---
+
+### New in Patcher v1.2
+
+#### 5. Loader Env Var Names
+
+The env vars that `spawn-guard.sh` exports for `loader-adapter.c` (`SILPH_LOADER_SCOPE` and `SILPH_LOADER_CONTEXT_FD`) are now randomised on every run. Both files are always updated together so they stay in sync.
+
+| Files patched | What changes |
+|---|---|
+| `app/src/main/assets/engine/spawn-guard.sh` | Both `export VAR=` lines renamed |
+| `native/loader-adapter.c` | Both `getenv("VAR")` and `unsetenv("VAR")` calls renamed |
+
+Example names from the random pools:
+
+SCOPE var pool:
+```
+SILPH_LOADER_SCOPE   ANDROID_PROC_SCOPE   SYSTEM_LOADER_CTX   PROC_RUNTIME_SCOPE
+ART_LOADER_SCOPE     DALVIK_RUNTIME_SCOPE RUNTIME_LOADER_CTX  SYSTEM_RUNTIME_SCOPE
+PROC_LOADER_CTX      ART_RUNTIME_SCOPE
+```
+
+CTXFD var pool:
+```
+SILPH_LOADER_CONTEXT_FD  ANDROID_CONTEXT_FD  SYSTEM_CONTEXT_FD  ART_CONTEXT_FD
+PROC_CONTEXT_FD          RUNTIME_CONTEXT_FD  DALVIK_CONTEXT_FD  LOADER_SELINUX_FD
+PROC_SELINUX_FD          ART_SELINUX_FD
+```
+
+#### 6. Loader Adapter Tag
+
+The adapter tag string embedded in the JSON log line of `loader-adapter.c` (e.g. `readonly-apk-v3`) must match the constant in `LoaderState.java`. Both are renamed together on every run.
+
+| Files patched | What changes |
+|---|---|
+| `native/loader-adapter.c` | `"adapter\":\"<tag>\"` in the JSON log line |
+| `app/src/main/java/dev/rootcatch/nativeengine/LoaderState.java` | `ADAPTER = "<tag>"` constant |
+
+Example tags: `readonly-apk-v3`, `readonly-apk-v4`, `apk-memfd-v2`, `apk-loader-v3`, `memfd-readonly-v1`, `apk-readonly-v2`, `loader-apk-v3`, `apk-context-v2`, `readonly-lib-v3`, `memfd-apk-v2`
+
+#### 7. Application ID (toggleable)
+
+The `applicationId` in `build.gradle.kts` can be randomised to a system-looking package name. A checkbox in the GUI controls this — **unchecked by default** since changing the app ID requires uninstalling the previous build first.
+
+The patcher always picks a value different from the current one. If the checkbox is left unchecked on subsequent runs the ID is not touched, so the installed app keeps working.
+
+Example IDs: `com.android.systemservice`, `com.system.runtime.helper`, `com.android.process.monitor`, `com.device.manager.service`, `com.runtime.system.core`, `com.android.overlay.service`, `com.system.audio.manager`, `com.android.media.service`, `com.google.android.sync`
+
+---
+
+### Bugs Fixed in 1.0.3
+
+**1 — Engine: Injector isolation unavailable**
+
+Root cause: Python's `Path.write_text()` converts `\n` → `\r\n` on Windows. The v1.1 patcher was the first to write `spawn-guard.sh`. The resulting CRLF file was packed into the APK and run on-device by Android's `sh`/`mksh`, which does not strip `\r`. `then\r` is not the keyword `then` — the probe script failed to parse, exited non-zero, `guardExit != 0` → `isolated = false` → "Injector isolation unavailable".
+
+Fix: `tools/patch_build.py` — added `newline="\n"` to every `write_text()` call (4 locations). `spawn-guard.sh` in the repo was also converted back to LF.
+
+**2 — Engine: Location treatment requires the automatic engine**
+
+Root cause: `NativeEngineRunner.enableNativeLocation()` had the package name `"dev.rootcatch.ugphonetest"` hardcoded. As soon as the app ID was randomised by the patcher, `context.getPackageName()` no longer matched, and every start with "Fix Error 12" enabled threw this error.
+
+Fix: `NativeEngineRunner.java` — replaced the hardcoded string with `dev.rootcatch.BuildConfig.APPLICATION_ID`, which always matches the compiled-in package name regardless of what the patcher chose.
+
+---
+
+### Files Added / Changed
+
+| File | Change |
+|---|---|
+| `tools/patch_build.py` | v1.2: 4 new patch steps; `newline="\n"` on all writes (CRLF fix) |
+| `patcher_gui.py` | Version label → Patcher v1.2; App ID checkbox added |
+| `app/src/main/assets/engine/spawn-guard.sh` | Converted to LF; env var names patched each run |
+| `native/loader-adapter.c` | Env var names + adapter tag patched each run |
+| `app/src/main/java/dev/rootcatch/nativeengine/LoaderState.java` | Adapter tag patched each run |
+| `app/src/main/java/dev/rootcatch/nativeengine/NativeEngineRunner.java` | Hardcoded package name → `BuildConfig.APPLICATION_ID` |
+| `app/build.gradle.kts` | App ID optionally patched each run |
+| `native/loader-policy.c` | memfd name patched each run (unchanged from v1.0.1) |
+| `app/src/main/java/dev/rootcatch/nativeengine/ConnectionStrategy.java` | NS var + SHA-256 patched each run (unchanged from v1.0.1) |
 
 ---
 

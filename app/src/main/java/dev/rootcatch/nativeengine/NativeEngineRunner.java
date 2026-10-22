@@ -178,7 +178,7 @@ public final class NativeEngineRunner implements Runnable {
     /** Process-local location option, restricted to this edition. */
     public void enableNativeLocation(boolean enabled) {
         if (process != null || attached) throw new IllegalStateException("Session already started");
-        if (enabled && (!automaticPreflight || !"dev.rootcatch.ugphonetest".equals(context.getPackageName())))
+        if (enabled && (!automaticPreflight || !dev.rootcatch.BuildConfig.APPLICATION_ID.equals(context.getPackageName())))
             throw new IllegalArgumentException("Location treatment requires the automatic engine");
         nativeLocationJNI = enabled;
         nativeLocationCleanupConfirmed = !enabled;

@@ -1,5 +1,7 @@
 * text=auto
 *.java text eol=lf
+*.c text eol=lf
+*.h text eol=lf
 *.ts text eol=lf
 *.cjs text eol=lf
 *.json text eol=lf
