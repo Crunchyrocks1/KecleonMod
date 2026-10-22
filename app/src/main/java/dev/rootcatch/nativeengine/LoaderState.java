@@ -1,7 +1,7 @@
 package dev.rootcatch.nativeengine;
 
 public final class LoaderState {
-    public static final String ADAPTER = "loader-apk-v3";
+    public static final String ADAPTER = "apk-loader-v3";
     private boolean ready, adapted;
     private String stage = "not_started";
     private int error, originalError;

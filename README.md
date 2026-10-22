@@ -9,12 +9,108 @@ Built on SilphMod 1.9.3 as the base engine — catches, spins, research, transfe
 
 | Version | Date | Tag | Summary |
 |---------|------|-----|---------|
+| [1.0.6](#v106--anti-detection-patcher-14--delay-jitter--path-sync-fix) | 2026-10-22 | `v1.0.6` | 5 anti-detection patches, Patcher v1.4 (thread + path randomisation), delay jitter, AgentBuild path-sync architecture, engine path crash fixes. |
 | [1.0.5](#v105--accordion-ui--throw-quality--spin-gyms--auto-save) | 2026-10-21 | `v1.0.5` | Accordion sections, multi-select throw quality, Curveball/AR Mode toggles, Spin Gyms, inline item management, settings auto-save. |
 | [1.0.4](#v104--patcher-13--ui-redesign--new-engine-features) | 2026-10-21 | `Patcher 1.3 + UI + Engine Features` | Full KecleonMod UI redesign. Trainer name, separate spin/catch delays, Keep Nundo. Fixed LABEL crash in game-tools. |
 | [1.0.3](#v103--patcher-12--bug-fixes) | 2026-10-21 | `Patcher 1.2 + Bug Fixes` | Patcher v1.2: 4 new anti-detection patches, app ID randomisation toggle. Fixed CRLF probe crash and hardcoded package name. |
 | ~~1.0.2~~ | — | *(skipped)* | — |
 | [1.0.1](#v101--patcher--anti-detection) | 2026-10-21 | `Patcher + Anti-Detection` | GUI patcher, randomised anti-detection strings, full SHA-256 sync, engine rebuild step. |
 | [1.0.0](#v100--base-build) | 2026-10-21 | `Base Build` | Clean SilphMod 1.9.3 base. Fixed all injection bugs. First working build. |
+
+---
+
+## v1.0.6 — Anti-Detection + Patcher v1.4 + Delay Jitter + Path Sync Fix
+
+**Date:** 2026-10-22
+**Status:** Working
+**APK:** `app-release.apk` (signed with debug keystore)
+
+### Overview
+5 hardcoded-string anti-detection patches applied, Patcher v1.4 now randomises thread names and agent asset paths each build, ±15% delay jitter added to all action timing, and a compile-time `AgentBuild` architecture introduced so every file that references the agent asset directory stays in sync automatically — eliminating the engine integrity and spawn-guard path crashes that appeared after the first patcher run.
+
+---
+
+### Anti-Detection Patches
+
+#### 1. Thread Name Randomisation (Patcher v1.4)
+Thread names are visible to any process that reads `/proc/<pid>/task/*/comm`. Two threads in `NativeEngineRunner` and one in `FarmService` were renamed from identifiable strings to generic Android-looking names. Patcher v1.4 rotates these from pools on every build so no fixed name persists across APK versions.
+
+| Old name | New (example) | Location |
+|---|---|---|
+| `rootcatch-native-stop` | `async-task-3` | `NativeEngineRunner` stop thread |
+| `rootcatch-native-reader` | `io-worker-1` | `NativeEngineRunner` reader thread |
+| `rootcatch-farm` | `binder-pool-2` | `FarmService` farm thread |
+
+#### 2. SharedPreferences File Rename
+`/data/data/<pkg>/shared_prefs/rootcatch.xml` was a fingerprint-able filename. Renamed once to `app_config` — kept stable (not rotated per build) so user settings survive APK updates.
+
+| Old filename | New filename |
+|---|---|
+| `rootcatch.xml` | `app_config.xml` |
+
+#### 3. Agent Asset Path Randomisation (Patcher v1.4)
+The agent JS bundle was at the Frida-standard path `engine/agent.js`. Patcher v1.4 now picks a random directory name from a pool (`opt`, `res`, `sys`, `lib`, `bin`, `cfg`, `var`) and a random filename (`service.bin`, `config.bin`, `runtime.bin`, `loader.bin`, `agent.bin`) on each build, moving the asset and updating all references.
+
+#### 4. Delay Jitter (±15%)
+All fixed action delays in `agent.ts` are now passed through a `jitter()` helper that applies ±15% random variation. This breaks fixed-interval timing signatures detectable by network traffic analysis.
+
+```typescript
+function jitter(ms: number): number {
+    return Math.round(ms * (0.85 + Math.random() * 0.30));
+}
+```
+
+Applied to: `actionDelayMs`, `spinDelayMs`, `catchDelayMs` (7 call sites).
+
+#### 5. Notification String Genericisation
+- Notification channel ID: `bg_service`, display name `"Background Service"` (was `"KecleonMod"`)
+- Wake lock tag: `app:bg` (was `rootcatch:farm`)
+- Notification title: removed `"KecleonMod · "` prefix — shows app name only
+- Internal logs directory: `app-logs` (was `engine-logs`)
+
+---
+
+### Patcher v1.4
+
+`tools/patch_build.py` now handles two new randomisation steps in addition to the existing three:
+
+| Step | What it randomises | Pool size |
+|---|---|---|
+| Thread names | stop thread, reader thread, farm thread | 5 names each |
+| Agent path | asset directory + filename | 7 dirs × 5 files |
+| App ID | `applicationId` suffix | (unchanged from v1.3) |
+| Version code | `versionCode` | (unchanged from v1.3) |
+| Native hashes | `librootcatch-inject.so` SHA | (unchanged from v1.3) |
+
+New reader functions: `read_thread_stop()`, `read_thread_reader()`, `read_thread_farm()`, `read_agent_dir()`, `read_agent_file()`. New patch steps: `step_patch_thread_names()`, `step_patch_agent_path()`.
+
+---
+
+### AgentBuild Path-Sync Architecture
+
+**Problem:** After the first patcher run renamed `engine/agent.js` to `sys/config.bin`, three files still had `"engine/"` hardcoded and crashed at runtime:
+- `FarmSession.java` → "Engine integrity check failed"
+- `CompatibilitySession.java` → "ENGINE: ENGINE/SPAWN-GUARD.SH"
+- `LogExporter.java` → asset-not-found on `injector.json`
+
+**Solution:** `engine/build.cjs` now emits two additional constants into the generated `AgentBuild.java`:
+
+```java
+static final String SHA256 = "...";  // existed before
+static final String PATH   = "lib/service.bin";   // new
+static final String DIR    = "lib";                // new
+```
+
+`FarmPolicy` exposes `AGENT_PATH` and `AGENT_DIR` from these. Every file now reads `FarmPolicy.AGENT_DIR` instead of the literal `"engine"`. Because the value is baked in at compile time from whatever `build.cjs` just output, it is permanently immune to patcher renames — no patcher rule needed.
+
+---
+
+### Bug Fixes
+
+| Fix | Root cause | Commit |
+|---|---|---|
+| "Engine integrity check failed" at startup | `FarmSession` opened `engine/agent.js` (old hardcoded path); post-rename the stale file had a different SHA than `AgentBuild.SHA256` | `a773f5d` |
+| "ENGINE: ENGINE/SPAWN-GUARD.SH" error | `CompatibilitySession` and `LogExporter` had literal `"engine/"` prefixes the patcher never updated | `d9107dd` |
 
 ---
 

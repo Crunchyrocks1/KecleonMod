@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'app/build/generated/engine');
-const asset = path.join(output, 'assets/opt/loader.bin');
+const asset = path.join(output, 'assets/lib/service.bin');
 esbuild.buildSync({
   absWorkingDir: __dirname, entryPoints: ['src/silph-entry.ts'], bundle: true, preserveSymlinks: true,
   format: 'iife', platform: 'neutral', mainFields: ['main', 'module'],
@@ -18,5 +18,5 @@ const generated = path.join(output, 'java/dev/rootcatch/ugphone/AgentBuild.java'
 fs.mkdirSync(path.dirname(generated), {recursive: true});
 fs.writeFileSync(generated, `package dev.rootcatch.ugphone;\nfinal class AgentBuild {\n` +
   `    static final String SHA256 = "${hash}";\n    static final String PATH = "${assetPath}";\n    static final String DIR = "${assetDir}";\n    private AgentBuild() { }\n}\n`);
-fs.copyFileSync(path.join(root, 'tools/native-runtime.json'), path.join(output, 'assets/opt/injector.json'));
+fs.copyFileSync(path.join(root, 'tools/native-runtime.json'), path.join(output, 'assets/lib/injector.json'));
 process.stdout.write(JSON.stringify({agentSha256: hash, bytes: fs.statSync(asset).size}) + '\n');

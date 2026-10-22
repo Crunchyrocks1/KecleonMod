@@ -207,7 +207,7 @@ public final class FarmService extends Service {
         current.skipBuddyRemoval(buddyRemovalHandled);
         current.verifyStartupOnly(verificationOnly);
         session = current; activeSession = current; workerAlive = true;
-        new Thread(current, "io-dispatcher-1").start();
+        new Thread(current, "gc-worker-3").start();
     }
     private void scheduleRecovery(long token, long round) {
         session = null;
