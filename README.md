@@ -9,11 +9,98 @@ Built on SilphMod 1.9.3 as the base engine — catches, spins, research, transfe
 
 | Version | Date | Tag | Summary |
 |---------|------|-----|---------|
+| [1.0.5](#v105--accordion-ui--throw-quality--spin-gyms--auto-save) | 2026-10-21 | `v1.0.5` | Accordion sections, multi-select throw quality, Curveball/AR Mode toggles, Spin Gyms, inline item management, settings auto-save. |
 | [1.0.4](#v104--patcher-13--ui-redesign--new-engine-features) | 2026-10-21 | `Patcher 1.3 + UI + Engine Features` | Full KecleonMod UI redesign. Trainer name, separate spin/catch delays, Keep Nundo. Fixed LABEL crash in game-tools. |
 | [1.0.3](#v103--patcher-12--bug-fixes) | 2026-10-21 | `Patcher 1.2 + Bug Fixes` | Patcher v1.2: 4 new anti-detection patches, app ID randomisation toggle. Fixed CRLF probe crash and hardcoded package name. |
 | ~~1.0.2~~ | — | *(skipped)* | — |
 | [1.0.1](#v101--patcher--anti-detection) | 2026-10-21 | `Patcher + Anti-Detection` | GUI patcher, randomised anti-detection strings, full SHA-256 sync, engine rebuild step. |
 | [1.0.0](#v100--base-build) | 2026-10-21 | `Base Build` | Clean SilphMod 1.9.3 base. Fixed all injection bugs. First working build. |
+
+---
+
+## v1.0.5 — Accordion UI + Throw Quality + Spin Gyms + Auto-Save
+
+**Date:** 2026-10-21
+**Status:** Working
+**APK:** `app-release.apk` (signed with debug keystore)
+
+### Overview
+Major UI overhaul with 5 collapsible accordion sections, multi-select throw quality with random pick, Curveball and AR Mode toggles, confirmed Spin Gyms support, inline item management checkboxes, and a permanent fix for settings not saving on app pause.
+
+---
+
+### New Features
+
+#### Collapsible Accordion Sections
+The flat single-card layout is replaced with 5 independent collapsible sections. Tap a header to expand or collapse it. The last expanded/collapsed state is remembered per section.
+
+| Section | Contents |
+|---|---|
+| **Catch Settings** | Catches toggle, Pokémon filter, throw quality checkboxes, Curveball, AR Mode, catch delay, max catches |
+| **Spin Settings** | Spin PokéStops toggle, Spin Gyms toggle, spin delay, max spins |
+| **Transfer Settings** | Transfer toggle + all keep-protection checkboxes |
+| **Inventory Settings** | Berries, Show IV names, Extended manual transfer, Clean item bag + item rows |
+| **Extra Settings** | Fast gift opening, Hide trainer name, Trainer name, Fix error 12, Remove buddy |
+
+#### Multi-Select Throw Quality
+The single throw quality button is replaced with 4 independent checkboxes: **Normal**, **Nice**, **Great**, **Excellent**. Any combination can be selected. When more than one is checked the engine picks one at random on each throw attempt. Defaults to Excellent only.
+
+#### Curveball Toggle
+Curveball was previously always on. It is now a checkbox in Catch Settings (default on). The `Spinning` field on `PokeballThrow` is set to `true`/`false` based on the toggle.
+
+#### AR Mode Toggle
+New checkbox in Catch Settings (default off). When on, sets `ExpertHandler = true` on `ARPlusEncounterValuesProto` to trigger the AR+ catch bonus. If the field name changes in a game update, the engine detects the failure on the first throw and shows a status bar warning instead of silently failing.
+
+#### Spin Gyms
+New toggle in Spin Settings. Uses a runtime probe to discover the IL2CPP method name for the gym fort list (tries 7 known candidate names; caches the first match). Gyms can be spun independently of PokéStops — both, either, or neither can be enabled. The engine calls `FortSearch` RPC 101 (same proto as PokéStops) once the method is found.
+
+#### Inline Item Management
+The "X item types" button that opened a dialog is replaced with inline checkboxes and keep-amount fields directly in the Inventory Settings section under the Clean item bag toggle. Items are grouped by category:
+
+| Group | Items |
+|---|---|
+| Poké Balls | Poké Ball, Great Ball, Ultra Ball |
+| Potions and revives | Potion, Super Potion, Hyper Potion, Max Potion, Revive, Max Revive |
+| Berries | Razz Berry, Nanab Berry, Pinap Berry, Golden Razz Berry, Silver Pinap Berry |
+| Evolution items | Sun Stone, King's Rock, Metal Coat, Dragon Scale, Up-Grade, Sinnoh Stone, Unova Stone |
+| Technical Machines | Fast TM, Charged TM |
+| Consumables | Lucky Egg, Star Piece, Poffin, Incense |
+| Lure Modules | Lure Module, Glacial, Mossy, Magnetic, Rainy, Golden |
+
+Each item has a checkbox (enable cleanup) and a number field (how many to keep). The amount field dims when the item is unchecked.
+
+---
+
+### Bugs Fixed
+
+#### Settings Not Saving on App Pause
+Previously `saveDraft()` (called on `onPause`) ran `saveSettings()` which validates before writing. Any validation failure — no throw quality checked, no items selected with clean on, no feature selected — threw an exception that was silently caught, so **nothing was written to SharedPreferences**. All boolean toggles and checkboxes were lost on every pause.
+
+Fix: split into `persistSettings()` (always writes, no validation, treats invalid item amounts as 0) and `saveSettings()` (validates then calls `persistSettings()`). `saveDraft()` now calls `persistSettings()` directly.
+
+#### AR Mode Silent Failure
+AR Mode set `ExpertHandler` inside an empty `try/catch` — if the field was renamed in a game update the feature would stop working with no indication. Fixed to probe once on the first throw: success sets a cached flag so subsequent throws call it directly; failure emits `ar_mode_error` which surfaces as a status bar message and disables AR for the session.
+
+#### Spin Gyms: "Select a feature" with Gyms Only
+`FarmPolicy.validate()` did not count `spinGyms` as a standalone feature, so enabling only Spin Gyms blocked starting with "Select a feature". Fixed by adding `spinGyms` to the validation check.
+
+#### Spin Gyms: Not Spinning When AutoSpin Was Off
+The gym spin code was only reached if `config.autoSpin` was true. Fixed — the tick loop now gates on `config.autoSpin || config.spinGyms`, and the PokéStop fetch is guarded by `config.autoSpin` so it is skipped when only gyms are enabled.
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `app/src/main/java/dev/rootcatch/ugphone/MainActivity.java` | Accordion layout; throw quality checkboxes; inline item rows; persistSettings() split |
+| `app/src/main/java/dev/rootcatch/automation/AutomationConfig.java` | `throwQualities` list, `curveball`, `arMode`, `spinGyms`, `spinDelayMs`, `catchDelayMs` fields |
+| `app/src/main/java/dev/rootcatch/nativeengine/NativeEngineRunner.java` | `throwQualities` JSONArray, `curveball`, `arMode`, `spinGyms` params; `ar_mode_error` event handler |
+| `app/src/main/java/dev/rootcatch/ugphone/FarmSession.java` | `throwQualities`, `curveball`, `arMode`, `spinGyms` in session record |
+| `app/src/main/java/dev/rootcatch/ugphone/FarmPolicy.java` | `spinGyms` param added to `validate()` |
+| `engine/src/agent.ts` | Multi-quality throw pick; curveball field; AR mode probe-once; gym method probe + spin; separate spin/catch delay timers |
+| `engine/src/throw-profile.cjs` | New `pick(qualities[])` function for random multi-quality selection |
+| `engine/src/game-tools.cjs` | Removed `LABEL` from `module.exports` (was causing ReferenceError on startup) |
 
 ---
 
@@ -333,20 +420,24 @@ All features are from SilphMod 1.9.3. See below for a summary; future versions w
 |---------|-------|
 | Autocatch | Nearest eligible target within read game range (up to 50 m) |
 | Only catch | Species filter with thumbnails and Pokédex order |
-| Throw quality | Normal / Nice / Great / Excellent with curveball |
+| Throw quality | Normal / Nice / Great / Excellent — multi-select, random pick when multiple chosen |
+| Curveball | Toggle on/off per session (default on) |
+| AR Mode | Sets AR+ expert handler bonus per throw (default off); warns if field missing after update |
 | Berries | Priority-ordered; confirms effect before throwing |
 | PokéStop spins | Within game range (80 m for spins) |
+| Spin Gyms | Runtime method probe; can run independently of PokéStop spinning |
 | Field research | Claims, catches encounters, discards incompatible tasks |
 | Remove buddy | One-time per service start, triggers game restart |
 | Transfers | Session-only Pokémon with exact ID confirmation |
-| Keep filters | Shiny, 100% IV, Dynamax, hatched, background, shiny+background, field research |
+| Keep filters | Shiny, 100% IV, 0/0/0 (nundo), Dynamax, hatched, background, shiny+background, field research |
 | Show IV names | Temporary in-inventory display — account name unchanged |
 | Extended manual transfer | Expands multi-select for special Pokémon |
 | Fast gift opening | Reduces gift open animation to 50 ms |
 | Hide trainer name | Displays temporary name in HUD/profile — account unchanged |
-| Item bag cleanup | Per-type limits, from session start, no total quota |
+| Item bag cleanup | 31 items across 7 groups; per-type keep limits; inline checkboxes with amounts |
 | Fix Error 12 | JNI mock-location treatment, optional, per-session |
 | Session limits | Max catches (default 4800) and spins (default 2400) |
+| Separate delays | Independent catch delay and spin delay (100–3000 ms each) |
 | Map recovery | Auto-restarts game after 5 min with no Pokémon in range |
 | Statistics | Catches, flees, spins, transfers, XP, Stardust — persistent until cleared |
 | Log export | Last 3 sessions as a ZIP with SHA-256 index |
