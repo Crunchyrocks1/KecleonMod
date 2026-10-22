@@ -110,6 +110,7 @@ const mapObserver=new mapObservation.MapObserver();
 const spinObserver=new spinObservation.SpinObserver();
 let nextSpinBlockedReport=0,spinBagBlocked=false;
 let gymMethodName:string|null=null,gymMethodProbed=false;
+let arModeWorking:boolean|null=null;
 const GYM_CANDIDATES=['get_ActiveGyms','get_ActiveForts','get_NearbyGyms','get_Gyms','get_VisitableGyms','get_GymBuildings','get_ActiveFortDetails'];
 let storageCache:{at:number;pokemonCount:number;maxPokemon:number;pokemonBagFull:boolean}|null=null;
 let startupGate:any=null,activationRequest:any=null;
@@ -1130,7 +1131,12 @@ function startCapture(counts:Record<string,number>):boolean {
   data.field('Missed').value=false;data.field('HitBullseye').value=profile.hitBullseye;
   data.field('Spinning').value=config.curveball;data.field('ReticleSize').value=profile.reticleSize;
   const ar=proto('ARPlusEncounterValuesProto');
-  if(config.arMode){try{ar.field('ExpertHandler').value=true;}catch(e){}}
+  if(config.arMode){
+    if(arModeWorking===null){
+      try{ar.field('ExpertHandler').value=true;arModeWorking=true;}
+      catch(e){arModeWorking=false;emit('ar_mode_error',{message:String(e)});}
+    }else if(arModeWorking){ar.field('ExpertHandler').value=true;}
+  }
   const id=pokemon.method<UInt64>('get_EncounterId',0).invoke().toString();
   if(!active(true))return true;
   enterStage('capture:TryCapture');

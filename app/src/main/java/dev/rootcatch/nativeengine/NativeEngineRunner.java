@@ -819,6 +819,8 @@ public final class NativeEngineRunner implements Runnable {
                 listener.onStatus(limits.isEmpty() ? "Internal · catches " + caught + " · spins " + spun + " · items " + discarded : limits);
                 lastStatusTime = SystemClock.elapsedRealtime();
             }
+        } else if ("ar_mode_error".equals(event)) {
+            listener.onStatus("AR Mode: field not found after game update · feature disabled for this session · export logs");
         } else if ("bag_full".equals(event) || "no_balls".equals(event)) {
             listener.onStatus("bag_full".equals(event)
                     ? "Item bag full: spins limited, catches remain available; check cleanup"
