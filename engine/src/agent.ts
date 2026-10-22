@@ -67,7 +67,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
   autoSendGift:boolean;pinPostcard:boolean;addStickers:boolean;hideTrainerName:boolean;trainerLabel:string;};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
-type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'; promise:HeldReference64;
+type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'gift'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
   captureRequest?:CaptureRequest;freshPromise?:boolean;sequence?:number;researchReward?:HeldReference64;distanceMeters?:number;captureLimitMeters?:number};
 let config:Config, initialized=false, stopped=false, ready=false, lastBeat=0, allowed=false;
@@ -133,6 +133,9 @@ const researchQueue=new fieldResearch.ResearchQueue();
 const researchStats={claimed:0,removed:0,encounters:0};
 const services=new Map<string,HeldReference64>();
 let buddyFlow:any=null;
+let giftProfileReady=false, nextGiftAction=0;
+const giftSentFriends=new Set<string>();
+const SEND_GIFT_RPC=611;
 let rangeObserver:any=null;
 let lastRangeObservation:any=null,captureRangeState=capturePlanning.range(null,0);
 let capturePriorityActions=0,transferDeadlineHits=0;
@@ -822,6 +825,12 @@ function poll() {
       emit('research_paused',{kind:p.kind,id:p.id,reason,retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
     }
+    if(p.kind==='gift') {
+      giftSentFriends.delete(p.id);
+      emit('gift_rejected',{friendId:p.id,reason,retryAllowed:true,farmingMayContinue:true});
+      pending=null;p.handles.forEach(h=>h.free());
+      nextAction=Math.max(nextAction,p.started+jitter(config.actionDelayMs));return;
+    }
     if(p.kind==='berry') {
       berryCycle?.reject();
       emit('berry_rejected',{id:p.id,item:p.item,reason,elapsedMs:Date.now()-p.started,
@@ -863,6 +872,11 @@ function poll() {
     if(p.kind.startsWith('quest_')&&Date.now()-p.started>18000) {
       researchQueue.uncertain(p.kind,p.id,Date.now());
       emit('research_paused',{kind:p.kind,id:p.id,reason:'response_timeout',retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
+      pending=null;p.handles.forEach(h=>h.free());return;
+    }
+    if(p.kind==='gift'&&Date.now()-p.started>18000) {
+      giftSentFriends.delete(p.id);
+      emit('gift_rejected',{friendId:p.id,reason:'response_timeout',retryAllowed:true,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
     }
     if(Date.now()-p.started>18000) throw Error('Timed out waiting for '+p.kind+'; not resent');
@@ -990,6 +1004,12 @@ function poll() {
         berryCycle=berryProfileReady?new berryPolicy.BerryCycle(number(result.field('ActiveItem').value)):null;
         emit('encounter',{id:research.encounterId(reward),source:'FIELD_RESEARCH',questId:p.id,...researchStats});
       }
+    } else if(p.kind==='gift') {
+      const status=number(result.field('Result').value);
+      const confirmed=status===1;
+      if(!confirmed)giftSentFriends.delete(p.id);
+      emit('gift_result',{friendId:p.id,status,confirmed,elapsedMs:Date.now()-p.started,
+        totalSent:giftSentFriends.size,farmingMayContinue:true});
     } else if(p.kind==='transfer') {
       if(result.class.fullName!=='Holoholo.Rpc.ReleasePokemonOutProto')throw Error('Incompatible transfer response class; not repeated');
       const status=number(result.field('Status').value);
@@ -1407,6 +1427,58 @@ function processBuddyRemoval():boolean {
   reserve(kind,sendRpc(buddyRemoval.RPC[kind],request,kind==='buddy_check'?'BuddyMapOutProto':'SetBuddyPokemonOutProto'),'buddy',[request]);
   return true;
 }
+function giftPreflight() {
+  if(!config.autoSendGift||config.encounterOnly)return;
+  enterStage('gift:preflight');
+  const SERVICE_CANDIDATES=[
+    'Niantic.Holoholo.Social.ISocialService',
+    'Niantic.Holoholo.Social.IFriendsService',
+    'Niantic.Holoholo.Social.Friends.IFriendsService',
+    'Niantic.Holoholo.Social.Gifting.IGiftingService',
+    'Niantic.Holoholo.Social.IPlayerSocialService',
+  ];
+  const FRIENDS_LIST_METHODS=['get_GiftableFriends','GetGiftableFriends','get_Friends','GetFriends','get_AllFriends'];
+  let pinFieldName='',stickerFieldName='';
+  try {
+    const req=klass('holo-protos','Holoholo.Rpc.SendGiftProto');
+    const res=klass('holo-protos','Holoholo.Rpc.SendGiftOutProto');
+    const f1=req.field('FriendId'),f2=res.field('Result');
+    if(f1.isStatic||f1.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible FriendId field');
+    if(f2.isStatic||f2.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible Result field');
+    const rpc=findService('Niantic.Holoholo.Rpc.IRpcHandler').method('SendRpc',5).inflate(req,res);
+    if(rpc.virtualAddress.isNull())throw Error('SendGift RPC not resolved');
+    checkPromiseLayout(res,true);
+    const pinF=req.tryField('PinPostcard');
+    const stickerF=req.tryField('IncludeSticker')??req.tryField('AddSticker');
+    pinFieldName=pinF?.name??'';stickerFieldName=stickerF?.name??'';
+  }catch(error){
+    emit('gift_profile',{available:false,reason:'proto_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
+    return;
+  }
+  let foundService='',foundMethod='';
+  if(containerHandle) {
+    for(const svcName of SERVICE_CANDIDATES) {
+      const type=Il2Cpp.domain.assembly('holo-game').image.tryClass(svcName);
+      if(!type)continue;
+      try {
+        const svc=heldObject(containerHandle,'Gift svc probe').method<Obj>('TryResolve',1)
+          .overload('System.Type').invoke(type.type.object);
+        if(!(svc instanceof Il2Cpp.Object)||svc.isNull())continue;
+        for(const m of FRIENDS_LIST_METHODS) {
+          const candidate=svc.tryMethod<Obj>(m,0);
+          if(candidate&&!candidate.isStatic&&!candidate.virtualAddress.isNull()){foundMethod=m;break;}
+        }
+        if(foundMethod){foundService=svcName;break;}
+      }catch{continue;}
+    }
+  }
+  giftProfileReady=foundService!=='';
+  emit('gift_profile',{available:giftProfileReady,service:foundService||null,
+    friendsMethod:foundMethod||null,pinFieldName:pinFieldName||null,
+    stickerFieldName:stickerFieldName||null,rpcId:SEND_GIFT_RPC,
+    pinPostcard:config.pinPostcard,addStickers:config.addStickers,
+    candidatesChecked:SERVICE_CANDIDATES.length});
+}
 function preflight(directory:Obj,bag:Obj) {
   bindSession(directory);
   researchPreflight();
@@ -1459,6 +1531,7 @@ function preflight(directory:Obj,bag:Obj) {
   berryPreflight(bag);
   rewardPreflight();
   buddyPreflight();
+  giftPreflight();
   const inventoryCounts=getInventory(true).counts;
   emit('inventory_plan',{counts:inventoryCounts,limits:config.discard,
     planned:policy.discardPlan(config.discard,inventoryCounts),cleanEnabled:config.cleanBag,cleanupTrigger:policy.CLEANUP_TRIGGER});
@@ -1535,6 +1608,87 @@ function observePresence(now:number) {
       buckets:rangeObservation.distanceBuckets(candidates,configured),nearest,sampleLimit:rangeObservation.CANDIDATE_LIMIT,
       candidateListTruncated:candidates.length>nearest.length,extraEncounterRequestsSent:0,extraCaptureRequestsSent:0});
   }
+}
+function tryAutoSendGift(now:number):boolean {
+  if(!config.autoSendGift||!giftProfileReady||now<nextGiftAction)return false;
+  enterStage('gift:friends_list');
+  const SERVICE_CANDIDATES=[
+    'Niantic.Holoholo.Social.ISocialService',
+    'Niantic.Holoholo.Social.IFriendsService',
+    'Niantic.Holoholo.Social.Friends.IFriendsService',
+    'Niantic.Holoholo.Social.Gifting.IGiftingService',
+    'Niantic.Holoholo.Social.IPlayerSocialService',
+  ];
+  const FRIENDS_LIST_METHODS=['get_GiftableFriends','GetGiftableFriends','get_Friends','GetFriends','get_AllFriends'];
+  const FRIEND_ID_PROPS=['PlayerId','get_PlayerId','FriendCode','Id','get_Id'];
+  const CAN_GIFT_PROPS=['CanSendGift','get_CanSendGift','CanReceiveGift','get_CanReceiveGift','IsGiftable','CanGift'];
+  let friends:Obj[]|null=null;
+  for(const svcName of SERVICE_CANDIDATES) {
+    try {
+      const svc=findService(svcName);
+      for(const mName of FRIENDS_LIST_METHODS) {
+        const m=svc.tryMethod<Obj>(mName,0);
+        if(!m||m.isStatic||m.virtualAddress.isNull())continue;
+        const val=m.invoke();
+        if(val instanceof Il2Cpp.Object&&!val.isNull()){friends=enumerate(val,200);break;}
+      }
+      if(friends!==null)break;
+    }catch{continue;}
+  }
+  if(friends===null){
+    nextGiftAction=now+60000;
+    emit('gift_friends_unavailable',{reason:'service_unavailable',retryAfterMs:60000});
+    return false;
+  }
+  if(friends.length===0){
+    nextGiftAction=now+300000;
+    emit('gift_friends_unavailable',{reason:'no_friends',retryAfterMs:300000});
+    return false;
+  }
+  for(const friend of friends) {
+    let friendId='';
+    for(const prop of FRIEND_ID_PROPS) {
+      try {
+        const m=friend.tryMethod<Il2Cpp.String>(prop,0);
+        if(m&&!m.isStatic&&!m.virtualAddress.isNull()&&m.returnType.name==='System.String'){
+          const v=m.invoke();if(v instanceof Il2Cpp.String&&!v.isNull()&&v.content){friendId=v.content;break;}
+        }
+        const f=friend.tryField<Il2Cpp.String>(prop);
+        if(f&&!f.isStatic&&f.type.name==='System.String'){
+          const v=f.value;if(v instanceof Il2Cpp.String&&!v.isNull()&&v.content){friendId=v.content;break;}
+        }
+      }catch{continue;}
+    }
+    if(!friendId||giftSentFriends.has(friendId))continue;
+    let canGift=true;
+    for(const prop of CAN_GIFT_PROPS) {
+      try {
+        const m=friend.tryMethod<boolean>(prop,0);
+        if(m&&!m.isStatic&&!m.virtualAddress.isNull()&&m.returnType.name==='System.Boolean'){canGift=m.invoke()===true;break;}
+        const f=friend.tryField<boolean>(prop);
+        if(f&&!f.isStatic&&f.type.name==='System.Boolean'){canGift=!!f.value;break;}
+      }catch{continue;}
+    }
+    if(!canGift)continue;
+    const req=proto('SendGiftProto');
+    field(req,'FriendId',Il2Cpp.string(friendId));
+    if(config.pinPostcard){
+      const pf=req.class.tryField('PinPostcard');
+      if(pf&&!pf.isStatic&&pf.type.name==='System.Boolean')field(req,'PinPostcard',true);
+    }
+    if(config.addStickers){
+      const sf=req.class.tryField('IncludeSticker')??req.class.tryField('AddSticker');
+      if(sf&&!sf.isStatic&&sf.type.name==='System.Boolean')field(req,sf.name,true);
+    }
+    giftSentFriends.add(friendId);
+    emit('gift_sending',{friendId,pinPostcard:config.pinPostcard,addStickers:config.addStickers,
+      rpcId:SEND_GIFT_RPC,totalSent:giftSentFriends.size});
+    reserve('gift',sendRpc(SEND_GIFT_RPC,req,'SendGiftOutProto'),friendId,[req]);
+    return true;
+  }
+  nextGiftAction=now+300000;
+  emit('gifts_complete',{sent:giftSentFriends.size,friendsChecked:friends.length,retryAfterMs:300000});
+  return false;
 }
 function tick() {
   const now=Date.now();if(stopped||inTick||now-lastTick<60)return;
@@ -1630,6 +1784,7 @@ function tick() {
       discard(counts,full);if(pending)return;
     }
     if(config.fieldResearch&&processResearch(now,counts))return;
+    if(config.autoSendGift&&tryAutoSendGift(now))return;
     if((config.autoSpin||config.spinGyms)&&spinAllowed()&&now>=nextSpin){spin(directory);if(pending)return;}
     // Bounded backpressure: never outrun the 64-entry inspection/transfer queue.
     if(config.autoCatch&&captureAllowed()&&ownedReads.size<16) {
