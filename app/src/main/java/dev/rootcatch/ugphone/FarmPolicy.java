@@ -16,8 +16,8 @@ final class FarmPolicy {
         if (value < min || value > max) throw new IllegalArgumentException(label + ": " + min + "–" + max);
         return value;
     }
-    static void validate(boolean capture, boolean spin, boolean clean, boolean transfer, String limits) {
-        if (!capture && !spin && !clean) throw new IllegalArgumentException("Select a feature");
+    static void validate(boolean capture, boolean spin, boolean spinGyms, boolean clean, boolean transfer, String limits) {
+        if (!capture && !spin && !spinGyms && !clean) throw new IllegalArgumentException("Select a feature");
         if (transfer && !capture) throw new IllegalArgumentException("Enable catches to transfer new catches");
         Map<String, Integer> parsed = EnginePolicy.parseLimits(limits);
         if (clean && parsed.isEmpty()) throw new IllegalArgumentException("Select items to clean");

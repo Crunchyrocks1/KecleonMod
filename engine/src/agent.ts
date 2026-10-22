@@ -1225,31 +1225,32 @@ function spin(directory:Obj) {
   if(stops.size>=4096){operationalState='stop_cache_capacity';spinObserver.observe(now,{blocked:'stop_cache_capacity'},emit);return;}
   const location=playerLocation();
   const lat=location.latitude,lng=location.longitude;
-  enterStage('spin:list');
-  const stopObjects=enumerate(object(directory.method<Obj>('get_ActivePokestops',0).invoke(),'MapDirectory.ActivePokestops'));
-  const scan={listed:stopObjects.length,visited:0,cooldown:0,outOfRange:0,invalidDistance:0,
-    scanLimitReached:stopObjects.length===256,complete:false,closestCheckedMeters:null as number|null,
-    earliestCooldownMs:null as number|null,selectedId:'',selectedDistanceMeters:null as number|null};
-  for (const stopObject of stopObjects) {
-    scan.visited++;
-    const id=(stopObject.method<Il2Cpp.String>('get_Id',0).invoke()).content!;
-    const until=stops.get(id)??0;
-    if(until>now) {scan.cooldown++;scan.earliestCooldownMs=Math.min(scan.earliestCooldownMs??Infinity,until-now);continue;}
-    const stopLocation=readLocation(stopObject.method<Il2Cpp.ValueType>('get_Location',0).invoke(),'pokestop');
-    const stopLat=stopLocation.latitude,stopLng=stopLocation.longitude;
-    const dist=distance(location,stopLocation);
-    if(!Number.isFinite(dist)){scan.invalidDistance++;continue;}
-    scan.closestCheckedMeters=Math.min(scan.closestCheckedMeters??Infinity,dist);
-    if(dist>80){scan.outOfRange++;continue;}
-    const request=proto('FortSearchProto');
-    field(request,'Id',Il2Cpp.string(id));field(request,'PlayerLatDegrees',lat);field(request,'PlayerLngDegrees',lng);
-    field(request,'FortLatDegrees',stopLat);field(request,'FortLngDegrees',stopLng);
-    // Optional ad/quest fields are left at game schema defaults.
-    if(!active(true))return;
-    reserve('spin',sendRpc(101,request,'FortSearchOutProto'),id,[request]);
-    scan.selectedId=id;scan.selectedDistanceMeters=dist;spinObserver.observe(now,scan,emit);return;
+  if(config.autoSpin) {
+    enterStage('spin:list');
+    const stopObjects=enumerate(object(directory.method<Obj>('get_ActivePokestops',0).invoke(),'MapDirectory.ActivePokestops'));
+    const scan={listed:stopObjects.length,visited:0,cooldown:0,outOfRange:0,invalidDistance:0,
+      scanLimitReached:stopObjects.length===256,complete:false,closestCheckedMeters:null as number|null,
+      earliestCooldownMs:null as number|null,selectedId:'',selectedDistanceMeters:null as number|null};
+    for (const stopObject of stopObjects) {
+      scan.visited++;
+      const id=(stopObject.method<Il2Cpp.String>('get_Id',0).invoke()).content!;
+      const until=stops.get(id)??0;
+      if(until>now) {scan.cooldown++;scan.earliestCooldownMs=Math.min(scan.earliestCooldownMs??Infinity,until-now);continue;}
+      const stopLocation=readLocation(stopObject.method<Il2Cpp.ValueType>('get_Location',0).invoke(),'pokestop');
+      const stopLat=stopLocation.latitude,stopLng=stopLocation.longitude;
+      const dist=distance(location,stopLocation);
+      if(!Number.isFinite(dist)){scan.invalidDistance++;continue;}
+      scan.closestCheckedMeters=Math.min(scan.closestCheckedMeters??Infinity,dist);
+      if(dist>80){scan.outOfRange++;continue;}
+      const request=proto('FortSearchProto');
+      field(request,'Id',Il2Cpp.string(id));field(request,'PlayerLatDegrees',lat);field(request,'PlayerLngDegrees',lng);
+      field(request,'FortLatDegrees',stopLat);field(request,'FortLngDegrees',stopLng);
+      if(!active(true))return;
+      reserve('spin',sendRpc(101,request,'FortSearchOutProto'),id,[request]);
+      scan.selectedId=id;scan.selectedDistanceMeters=dist;spinObserver.observe(now,scan,emit);return;
+    }
+    scan.complete=true;spinObserver.observe(now,scan,emit);
   }
-  scan.complete=true;spinObserver.observe(now,scan,emit);
   if(!config.spinGyms||!gymMethodName)return;
   try {
     enterStage('spin:gyms');
@@ -1387,7 +1388,7 @@ function preflight(directory:Obj,bag:Obj) {
     checkPromiseLayout(klass('holo-game','Niantic.Holoholo.Map.PokemonEncounterResponse'));
     checkPromiseLayout(klass('holo-protos','Holoholo.Rpc.CatchPokemonOutProto'));
   }
-  if(config.autoSpin) {
+  if(config.autoSpin||config.spinGyms) {
     const request=klass('holo-protos','Holoholo.Rpc.FortSearchProto');
     for(const name of ['Id','PlayerLatDegrees','PlayerLngDegrees','FortLatDegrees','FortLngDegrees'])request.field(name);
     const method=findService('Niantic.Holoholo.Rpc.IRpcHandler').method('SendRpc',5)
@@ -1407,7 +1408,7 @@ function preflight(directory:Obj,bag:Obj) {
       emit('gym_probe',{phase:'preflight',found:gymMethodName!==null,method:gymMethodName,candidates:GYM_CANDIDATES});
     }
   }
-  if(config.autoSpin||config.cleanBag)
+  if(config.autoSpin||config.spinGyms||config.cleanBag)
     findService('Niantic.Holoholo.Services.IItemBagService').method<boolean>('get_IsFull',0).invoke();
   if(config.cleanBag) {
     const request=klass('holo-protos','Holoholo.Rpc.RecycleItemProto');
@@ -1593,7 +1594,7 @@ function tick() {
       discard(counts,full);if(pending)return;
     }
     if(config.fieldResearch&&processResearch(now,counts))return;
-    if(config.autoSpin&&spinAllowed()&&now>=nextSpin){spin(directory);if(pending)return;}
+    if((config.autoSpin||config.spinGyms)&&spinAllowed()&&now>=nextSpin){spin(directory);if(pending)return;}
     // Bounded backpressure: never outrun the 64-entry inspection/transfer queue.
     if(config.autoCatch&&captureAllowed()&&ownedReads.size<16) {
       const storage=pokemonStorage(),full=storage.pokemonBagFull;

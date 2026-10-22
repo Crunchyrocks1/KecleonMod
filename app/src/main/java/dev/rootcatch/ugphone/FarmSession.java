@@ -143,7 +143,7 @@ final class FarmSession implements Runnable {
                     .put("userApprovedGameStop", userApprovedGameStop).put("maxStartupGameStopAttempts", 1).put("maxRetryGameStopAttempts", 1)
                     .put("startupAuthorization", userApprovedGameStop ? "USER_START_BUTTON" : "NONE")
                     .put("controlRecovery", true).put("controlStopAfterMs", 10000).put("actionLeaseMs", 2200));
-            FarmPolicy.validate(config.autoCatch, config.autoSpin, config.cleanBag, transfers.enabled, config.discardLimits);
+            FarmPolicy.validate(config.autoCatch, config.autoSpin, config.spinGyms, config.cleanBag, transfers.enabled, config.discardLimits);
             String block = dev.rootcatch.automation.SessionLimits.startBlock(baseline.caught, baseline.spun, config.maxCatches, config.maxSpins);
             if (!block.isEmpty()) throw new IllegalArgumentException(block);
             if(config.autoCatch&&config.useBerries&&config.berryOrder.isEmpty())throw new IllegalArgumentException("Select berries to use");

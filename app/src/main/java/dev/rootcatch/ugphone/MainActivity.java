@@ -348,7 +348,7 @@ public final class MainActivity extends Activity {
     }
 
     private void saveSettings() {
-        FarmPolicy.validate(capture.isChecked(), spin.isChecked(), clean.isChecked(), transfer.isChecked(), limits);
+        FarmPolicy.validate(capture.isChecked(), spin.isChecked(), spinGyms.isChecked(), clean.isChecked(), transfer.isChecked(), limits);
         if (capture.isChecked() && useBerries.isChecked() && BerryOptions.parse(berryOrder).isEmpty())
             throw new IllegalArgumentException(getString(R.string.select_berries));
         String name = trainerName.getText().toString().trim();

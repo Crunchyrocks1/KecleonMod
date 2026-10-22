@@ -135,7 +135,7 @@ public final class FarmService extends Service {
                     intent.getBooleanExtra("keepHatched", true), intent.getBooleanExtra("keepBackground", true),
                     intent.getBooleanExtra("keepShinyBackground", false), intent.getBooleanExtra("keepFieldResearch", true),
                     intent.getBooleanExtra("keepNundo", false), 0);
-            FarmPolicy.validate(config.autoCatch, config.autoSpin, config.cleanBag, transfers.enabled, config.discardLimits);
+            FarmPolicy.validate(config.autoCatch, config.autoSpin, config.spinGyms, config.cleanBag, transfers.enabled, config.discardLimits);
             String block = limitBlock();
             if (!block.isEmpty()) throw new IllegalArgumentException(block);
             if (!notificationsVisible(this)) throw new IllegalArgumentException("Enable service notifications");
