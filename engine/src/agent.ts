@@ -67,7 +67,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
   autoSendGift:boolean;pinPostcard:boolean;addStickers:boolean;hideTrainerName:boolean;trainerLabel:string;};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
-type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'gift'|'gift_fetch'; promise:HeldReference64;
+type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'gift'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
   captureRequest?:CaptureRequest;freshPromise?:boolean;sequence?:number;researchReward?:HeldReference64;distanceMeters?:number;captureLimitMeters?:number};
 let config:Config, initialized=false, stopped=false, ready=false, lastBeat=0, allowed=false;
@@ -135,7 +135,7 @@ const services=new Map<string,HeldReference64>();
 let buddyFlow:any=null;
 let giftProfileReady=false, nextGiftAction=0;
 const giftSentFriends=new Set<string>();
-const SEND_GIFT_RPC=611;
+const SEND_GIFT_RPC=950;
 let rangeObserver:any=null;
 let lastRangeObservation:any=null,captureRangeState=capturePlanning.range(null,0);
 let capturePriorityActions=0,transferDeadlineHits=0;
@@ -825,11 +825,6 @@ function poll() {
       emit('research_paused',{kind:p.kind,id:p.id,reason,retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
     }
-    if(p.kind==='gift_fetch') {
-      nextGiftAction=Date.now()+60000;
-      emit('gift_friends_fetch_failed',{reason,retryAfterMs:60000,farmingMayContinue:true});
-      pending=null;p.handles.forEach(h=>h.free());return;
-    }
     if(p.kind==='gift') {
       giftSentFriends.delete(p.id);
       emit('gift_rejected',{friendId:p.id,reason,retryAllowed:true,farmingMayContinue:true});
@@ -877,11 +872,6 @@ function poll() {
     if(p.kind.startsWith('quest_')&&Date.now()-p.started>18000) {
       researchQueue.uncertain(p.kind,p.id,Date.now());
       emit('research_paused',{kind:p.kind,id:p.id,reason:'response_timeout',retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
-      pending=null;p.handles.forEach(h=>h.free());return;
-    }
-    if(p.kind==='gift_fetch'&&Date.now()-p.started>30000) {
-      nextGiftAction=Date.now()+60000;
-      emit('gift_friends_fetch_failed',{reason:'response_timeout',retryAfterMs:60000,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
     }
     if(p.kind==='gift'&&Date.now()-p.started>18000) {
@@ -1014,9 +1004,6 @@ function poll() {
         berryCycle=berryProfileReady?new berryPolicy.BerryCycle(number(result.field('ActiveItem').value)):null;
         emit('encounter',{id:research.encounterId(reward),source:'FIELD_RESEARCH',questId:p.id,...researchStats});
       }
-    } else if(p.kind==='gift_fetch') {
-      // Cache is now populated; next tryAutoSendGift call will find friends
-      emit('gift_friends_fetched',{farmingMayContinue:true});
     } else if(p.kind==='gift') {
       const status=number(result.field('Result').value);
       const confirmed=status===1;
@@ -1645,19 +1632,16 @@ function tryAutoSendGift(now:number):boolean {
     if(id)playerIds.push(id);
   }
   if(playerIds.length===0){
-    // Cache empty — trigger a server fetch; cache will be populated when promise settles
+    // Cache empty — fire a fetch for its side effect (populates cache in background),
+    // then retry in 15s. Do NOT reserve the promise: it's a chained IPromise<IEnumerable<T>>
+    // whose concrete class won't have completeCalled/errorCalled/completedValue.
     enterStage('gift:fetch_friends');
-    const fetchM=friendsSvc.method<Obj>('GetFriendsListWithCacheRefresh',0);
-    if(!fetchM.isStatic&&!fetchM.virtualAddress.isNull()){
-      const fetchPromise=fetchM.invoke();
-      if(fetchPromise instanceof Il2Cpp.Object&&!fetchPromise.isNull()){
-        emit('gift_friends_fetching',{reason:'cache_empty'});
-        reserve('gift_fetch',object(fetchPromise,'GetFriendsListWithCacheRefresh'),'friends',[]);
-        return true;
-      }
-    }
-    nextGiftAction=now+60000;
-    emit('gift_unavailable',{reason:'no_friends_cached',total:0,retryAfterMs:60000});
+    try {
+      const fetchM=friendsSvc.method<Obj>('GetFriendsListWithCacheRefresh',0);
+      if(!fetchM.isStatic&&!fetchM.virtualAddress.isNull())fetchM.invoke();
+    }catch{/* best-effort */}
+    nextGiftAction=now+15000;
+    emit('gift_friends_fetching',{reason:'cache_empty',retryAfterMs:15000});
     return false;
   }
   // Find next friend not yet gifted this session
