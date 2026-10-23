@@ -1019,10 +1019,12 @@ function poll() {
       }
     } else if(p.kind==='friends_fetch') {
       // Extract player IDs from GetFriendsListOutProto.friend_ (RepeatedField<FriendProto> at 0x20)
-      const rpcResult=number(result.field('result_').value);
+      const rpcResult=result.handle.add(0x18).readInt(); // result_ at 0x18: bypass enum field type issue
       const friendRepeat=result.field<Obj>('friend_').value;
       let rawCount=0;
-      if(friendRepeat instanceof Il2Cpp.Object&&!friendRepeat.isNull()){
+      const friendRepeatIsNull=!(friendRepeat instanceof Il2Cpp.Object)||friendRepeat.isNull();
+      const friendRepeatClass=(!friendRepeatIsNull&&friendRepeat instanceof Il2Cpp.Object)?friendRepeat.class.fullName:'none';
+      if(!friendRepeatIsNull&&friendRepeat instanceof Il2Cpp.Object){
         const friends=enumerate(friendRepeat,500);
         rawCount=friends.length;
         localFriendIds=[];
@@ -1036,7 +1038,8 @@ function poll() {
       }
       friendStrategy='rpc_list';
       emit('gift_friends_loaded',{rpcResult,rawCount,count:localFriendIds.length,
-        responseClass:result.class.fullName,strategy:friendStrategy,farmingMayContinue:true});
+        responseClass:result.class.fullName,friendRepeatIsNull,friendRepeatClass,
+        strategy:friendStrategy,farmingMayContinue:true});
       nextGiftAction=0;
     } else if(p.kind==='gift') {
       const status=number(result.field('Result').value);
@@ -1714,9 +1717,10 @@ function tryAutoSendGift(now:number):boolean {
         return false;
       }
       const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
-      reqObj.handle.add(0x18).writeInt(1); // listOption_ at 0x18: SocialSettings.Types.ListOption.ReturnAll=1 (field.value= fails on enum types)
+      reqObj.handle.add(0x18).writeInt(1); // listOption_ at 0x18: SocialSettings.Types.ListOption.ReturnAll=1
+      const listOptionReadback=reqObj.handle.add(0x18).readInt();
       const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
-      emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
+      emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC,listOptionWritten:listOptionReadback});
       reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
       return true;
     }
