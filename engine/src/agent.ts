@@ -1714,7 +1714,7 @@ function tryAutoSendGift(now:number):boolean {
         return false;
       }
       const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
-      reqObj.field('listOption_').value=1; // SocialSettings.Types.ListOption.ReturnAll=1; default 0=UnsetOption returns empty list
+      reqObj.handle.add(0x18).writeInt(1); // listOption_ at 0x18: SocialSettings.Types.ListOption.ReturnAll=1 (field.value= fails on enum types)
       const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
       emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
       reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
