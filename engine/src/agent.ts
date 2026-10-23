@@ -133,7 +133,7 @@ const researchQueue=new fieldResearch.ResearchQueue();
 const researchStats={claimed:0,removed:0,encounters:0};
 const services=new Map<string,HeldReference64>();
 let buddyFlow:any=null;
-let giftProfileReady=false, nextGiftAction=0, giftRecipientField='';
+let giftProfileReady=false, nextGiftAction=0;
 const giftSentFriends=new Set<string>();
 const SEND_GIFT_RPC=611;
 let rangeObserver:any=null;
@@ -1005,12 +1005,12 @@ function poll() {
         emit('encounter',{id:research.encounterId(reward),source:'FIELD_RESEARCH',questId:p.id,...researchStats});
       }
     } else if(p.kind==='gift') {
-      const statusField=result.tryField('Result')??result.tryField('Status');
-      if(!statusField)throw Error('No result field in SendGiftOutProto response');
-      const status=number(statusField.value);
+      const status=number(result.field('Result').value);
       const confirmed=status===1;
-      if(!confirmed)giftSentFriends.delete(p.id);
-      emit('gift_result',{friendId:p.id,status,confirmed,elapsedMs:Date.now()-p.started,
+      // 5=AlreadySentToday 6=RecipientHasUnopenedGift — keep in sentFriends (skip for session)
+      // anything else non-success → remove so it can be retried
+      if(!confirmed&&status!==5&&status!==6)giftSentFriends.delete(p.id);
+      emit('gift_result',{recipientId:p.id,status,confirmed,elapsedMs:Date.now()-p.started,
         totalSent:giftSentFriends.size,farmingMayContinue:true});
     } else if(p.kind==='transfer') {
       if(result.class.fullName!=='Holoholo.Rpc.ReleasePokemonOutProto')throw Error('Incompatible transfer response class; not repeated');
@@ -1432,72 +1432,47 @@ function processBuddyRemoval():boolean {
 function giftPreflight() {
   if(!config.autoSendGift||config.encounterOnly)return;
   enterStage('gift:preflight');
-  const SERVICE_CANDIDATES=[
-    'Niantic.Holoholo.Social.ISocialService',
-    'Niantic.Holoholo.Social.IFriendsService',
-    'Niantic.Holoholo.Social.Friends.IFriendsService',
-    'Niantic.Holoholo.Social.Gifting.IGiftingService',
-    'Niantic.Holoholo.Social.IPlayerSocialService',
-  ];
-  const FRIENDS_LIST_METHODS=['get_GiftableFriends','GetGiftableFriends','get_Friends','GetFriends','get_AllFriends'];
-  const RECIPIENT_CANDIDATES=['FriendId','RecipientPlayerId','PlayerId','FriendPlayerId','ToPlayerId','RecipientId'];
-  let pinFieldName='',stickerFieldName='',recipientField='';
+  // Validate proto schema (dump confirmed: GiftboxId:ulong, PlayerId:string, Result:enum)
+  const reqFields:string[]=[],resFields:string[]=[];
   try {
     const req=klass('holo-protos','Holoholo.Rpc.SendGiftProto');
     const res=klass('holo-protos','Holoholo.Rpc.SendGiftOutProto');
-    // Enumerate fields for diagnostics and auto-detection
-    const reqFields:string[]=[],resFields:string[]=[];
     req.fields.forEach((f:any)=>{if(!f.isStatic)reqFields.push(f.name+':'+f.type.name);});
     res.fields.forEach((f:any)=>{if(!f.isStatic)resFields.push(f.name+':'+f.type.name);});
     emit('gift_proto_fields',{request:reqFields,response:resFields});
-    // Try known names first, then fall back to first non-static string field
-    for(const name of RECIPIENT_CANDIDATES) {
-      const f=req.tryField(name);
-      if(f&&!f.isStatic&&f.offset>=Il2Cpp.Object.headerSize&&f.type.name==='System.String'){recipientField=name;break;}
-    }
-    if(!recipientField) {
-      req.fields.forEach((f:any)=>{
-        if(!recipientField&&!f.isStatic&&f.offset>=Il2Cpp.Object.headerSize&&f.type.name==='System.String')
-          recipientField=f.name;
-      });
-    }
-    if(!recipientField)throw Error('No recipient string field in SendGiftProto; fields: '+reqFields.join(','));
-    const f2=res.tryField('Result')??res.tryField('Status');
-    if(!f2||f2.isStatic||f2.offset<Il2Cpp.Object.headerSize)throw Error('No result/status field in SendGiftOutProto; fields: '+resFields.join(','));
+    const giftboxF=req.field('GiftboxId'),playerF=req.field('PlayerId'),resultF=res.field('Result');
+    if(giftboxF.isStatic||giftboxF.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible GiftboxId field');
+    if(playerF.isStatic||playerF.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible PlayerId field');
+    if(resultF.isStatic||resultF.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible Result field');
     const rpc=findService('Niantic.Holoholo.Rpc.IRpcHandler').method('SendRpc',5).inflate(req,res);
     if(rpc.virtualAddress.isNull())throw Error('SendGift RPC not resolved');
     checkPromiseLayout(res,true);
-    const pinF=req.tryField('PinPostcard');
-    const stickerF=req.tryField('IncludeSticker')??req.tryField('AddSticker');
-    pinFieldName=pinF?.name??'';stickerFieldName=stickerF?.name??'';
-    giftRecipientField=recipientField;
   }catch(error){
-    emit('gift_profile',{available:false,reason:'proto_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
+    emit('gift_profile',{available:false,reason:'proto_unavailable',error:String(error),
+      rpcId:SEND_GIFT_RPC,requestFields:reqFields,responseFields:resFields});
     return;
   }
-  let foundService='',foundMethod='';
-  if(containerHandle) {
-    for(const svcName of SERVICE_CANDIDATES) {
-      const type=Il2Cpp.domain.assembly('holo-game').image.tryClass(svcName);
-      if(!type)continue;
-      try {
-        const svc=heldObject(containerHandle,'Gift svc probe').method<Obj>('TryResolve',1)
-          .overload('System.Type').invoke(type.type.object);
-        if(!(svc instanceof Il2Cpp.Object)||svc.isNull())continue;
-        for(const m of FRIENDS_LIST_METHODS) {
-          const candidate=svc.tryMethod<Obj>(m,0);
-          if(candidate&&!candidate.isStatic&&!candidate.virtualAddress.isNull()){foundMethod=m;break;}
-        }
-        if(foundMethod){foundService=svcName;break;}
-      }catch{continue;}
-    }
+  // Validate IGiftingService (sendable gift boxes)
+  try {
+    const m=findService('Niantic.Holoholo.Social.Gifting.IGiftingService')
+      .method<Obj>('get_SendableGiftsInInventory',0);
+    if(m.isStatic||m.virtualAddress.isNull())throw Error('get_SendableGiftsInInventory unavailable');
+  }catch(error){
+    emit('gift_profile',{available:false,reason:'gifting_service_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
+    return;
   }
-  giftProfileReady=foundService!=='';
-  emit('gift_profile',{available:giftProfileReady,service:foundService||null,
-    friendsMethod:foundMethod||null,recipientField,pinFieldName:pinFieldName||null,
-    stickerFieldName:stickerFieldName||null,rpcId:SEND_GIFT_RPC,
-    pinPostcard:config.pinPostcard,addStickers:config.addStickers,
-    candidatesChecked:SERVICE_CANDIDATES.length});
+  // Validate IFriendsRpcService (cached friend dictionary)
+  try {
+    const m=findService('Niantic.Holoholo.Social.IFriendsRpcService')
+      .method<Obj>('get_CachedFriendDetails',0);
+    if(m.isStatic||m.virtualAddress.isNull())throw Error('get_CachedFriendDetails unavailable');
+  }catch(error){
+    emit('gift_profile',{available:false,reason:'friends_service_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
+    return;
+  }
+  giftProfileReady=true;
+  emit('gift_profile',{available:true,rpcId:SEND_GIFT_RPC,
+    pinPostcard:config.pinPostcard,addStickers:config.addStickers});
 }
 function preflight(directory:Obj,bag:Obj) {
   bindSession(directory);
@@ -1631,84 +1606,54 @@ function observePresence(now:number) {
 }
 function tryAutoSendGift(now:number):boolean {
   if(!config.autoSendGift||!giftProfileReady||now<nextGiftAction)return false;
-  enterStage('gift:friends_list');
-  const SERVICE_CANDIDATES=[
-    'Niantic.Holoholo.Social.ISocialService',
-    'Niantic.Holoholo.Social.IFriendsService',
-    'Niantic.Holoholo.Social.Friends.IFriendsService',
-    'Niantic.Holoholo.Social.Gifting.IGiftingService',
-    'Niantic.Holoholo.Social.IPlayerSocialService',
-  ];
-  const FRIENDS_LIST_METHODS=['get_GiftableFriends','GetGiftableFriends','get_Friends','GetFriends','get_AllFriends'];
-  const FRIEND_ID_PROPS=['PlayerId','get_PlayerId','FriendCode','Id','get_Id'];
-  const CAN_GIFT_PROPS=['CanSendGift','get_CanSendGift','CanReceiveGift','get_CanReceiveGift','IsGiftable','CanGift'];
-  let friends:Obj[]|null=null;
-  for(const svcName of SERVICE_CANDIDATES) {
-    try {
-      const svc=findService(svcName);
-      for(const mName of FRIENDS_LIST_METHODS) {
-        const m=svc.tryMethod<Obj>(mName,0);
-        if(!m||m.isStatic||m.virtualAddress.isNull())continue;
-        const val=m.invoke();
-        if(val instanceof Il2Cpp.Object&&!val.isNull()){friends=enumerate(val,200);break;}
-      }
-      if(friends!==null)break;
-    }catch{continue;}
-  }
-  if(friends===null){
+  enterStage('gift:sendable_gifts');
+  // Get sendable gift boxes from inventory
+  const giftingSvc=findService('Niantic.Holoholo.Social.Gifting.IGiftingService');
+  const giftsEnum=giftingSvc.method<Obj>('get_SendableGiftsInInventory',0).invoke();
+  if(!(giftsEnum instanceof Il2Cpp.Object)||giftsEnum.isNull()){
     nextGiftAction=now+60000;
-    emit('gift_friends_unavailable',{reason:'service_unavailable',retryAfterMs:60000});
+    emit('gift_unavailable',{reason:'no_sendable_gifts',retryAfterMs:60000});
     return false;
   }
-  if(friends.length===0){
+  const gifts=enumerate(giftsEnum,50);
+  if(gifts.length===0){
     nextGiftAction=now+300000;
-    emit('gift_friends_unavailable',{reason:'no_friends',retryAfterMs:300000});
+    emit('gift_unavailable',{reason:'inventory_empty',retryAfterMs:300000});
     return false;
   }
-  for(const friend of friends) {
-    let friendId='';
-    for(const prop of FRIEND_ID_PROPS) {
-      try {
-        const m=friend.tryMethod<Il2Cpp.String>(prop,0);
-        if(m&&!m.isStatic&&!m.virtualAddress.isNull()&&m.returnType.name==='System.String'){
-          const v=m.invoke();if(v instanceof Il2Cpp.String&&!v.isNull()&&v.content){friendId=v.content;break;}
-        }
-        const f=friend.tryField<Il2Cpp.String>(prop);
-        if(f&&!f.isStatic&&f.type.name==='System.String'){
-          const v=f.value;if(v instanceof Il2Cpp.String&&!v.isNull()&&v.content){friendId=v.content;break;}
-        }
-      }catch{continue;}
-    }
-    if(!friendId||giftSentFriends.has(friendId))continue;
-    let canGift=true;
-    for(const prop of CAN_GIFT_PROPS) {
-      try {
-        const m=friend.tryMethod<boolean>(prop,0);
-        if(m&&!m.isStatic&&!m.virtualAddress.isNull()&&m.returnType.name==='System.Boolean'){canGift=m.invoke()===true;break;}
-        const f=friend.tryField<boolean>(prop);
-        if(f&&!f.isStatic&&f.type.name==='System.Boolean'){canGift=!!f.value;break;}
-      }catch{continue;}
-    }
-    if(!canGift)continue;
-    const req=proto('SendGiftProto');
-    field(req,giftRecipientField,Il2Cpp.string(friendId));
-    if(config.pinPostcard){
-      const pf=req.class.tryField('PinPostcard');
-      if(pf&&!pf.isStatic&&pf.type.name==='System.Boolean')field(req,'PinPostcard',true);
-    }
-    if(config.addStickers){
-      const sf=req.class.tryField('IncludeSticker')??req.class.tryField('AddSticker');
-      if(sf&&!sf.isStatic&&sf.type.name==='System.Boolean')field(req,sf.name,true);
-    }
-    giftSentFriends.add(friendId);
-    emit('gift_sending',{friendId,pinPostcard:config.pinPostcard,addStickers:config.addStickers,
-      rpcId:SEND_GIFT_RPC,totalSent:giftSentFriends.size});
-    reserve('gift',sendRpc(SEND_GIFT_RPC,req,'SendGiftOutProto'),friendId,[req]);
-    return true;
+  // Get friend player IDs from cached dictionary (keys ARE player ID strings)
+  enterStage('gift:friend_ids');
+  const friendsSvc=findService('Niantic.Holoholo.Social.IFriendsRpcService');
+  const dict=object(friendsSvc.method<Obj>('get_CachedFriendDetails',0).invoke(),'CachedFriendDetails');
+  const keys=object(dict.method<Obj>('get_Keys',0).invoke(),'FriendKeys');
+  const playerIds:string[]=[];
+  for(const key of enumerate(keys,200)) {
+    const id=new Il2Cpp.String(key.handle).content;
+    if(id)playerIds.push(id);
   }
-  nextGiftAction=now+300000;
-  emit('gifts_complete',{sent:giftSentFriends.size,friendsChecked:friends.length,retryAfterMs:300000});
-  return false;
+  if(playerIds.length===0){
+    nextGiftAction=now+300000;
+    emit('gift_unavailable',{reason:'no_friends_cached',total:0,retryAfterMs:300000});
+    return false;
+  }
+  // Find next friend not yet gifted this session
+  const recipientId=playerIds.find(id=>!giftSentFriends.has(id));
+  if(!recipientId){
+    nextGiftAction=now+300000;
+    emit('gifts_complete',{sent:giftSentFriends.size,total:playerIds.length,retryAfterMs:300000});
+    return false;
+  }
+  // Build proto: GiftboxId (ulong) + PlayerId (string)
+  const giftBox=gifts[0];
+  const giftboxId=giftBox.field<UInt64>('GiftboxId').value;
+  const req=proto('SendGiftProto');
+  req.field('GiftboxId').value=giftboxId;
+  field(req,'PlayerId',Il2Cpp.string(recipientId));
+  giftSentFriends.add(recipientId);
+  emit('gift_sending',{recipientId,giftboxId:giftboxId.toString(),rpcId:SEND_GIFT_RPC,
+    giftsInInventory:gifts.length,totalSent:giftSentFriends.size});
+  reserve('gift',sendRpc(SEND_GIFT_RPC,req,'SendGiftOutProto'),recipientId,[req,giftBox]);
+  return true;
 }
 function tick() {
   const now=Date.now();if(stopped||inTick||now-lastTick<60)return;
