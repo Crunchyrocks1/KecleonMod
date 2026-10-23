@@ -1019,9 +1019,12 @@ function poll() {
       }
     } else if(p.kind==='friends_fetch') {
       // Extract player IDs from GetFriendsListOutProto.friend_ (RepeatedField<FriendProto> at 0x20)
+      const rpcResult=number(result.field('result_').value);
       const friendRepeat=result.field<Obj>('friend_').value;
+      let rawCount=0;
       if(friendRepeat instanceof Il2Cpp.Object&&!friendRepeat.isNull()){
         const friends=enumerate(friendRepeat,500);
+        rawCount=friends.length;
         localFriendIds=[];
         for(const f of friends){
           const psv=f.field<Obj>('playerId_').value;
@@ -1032,7 +1035,8 @@ function poll() {
         }
       }
       friendStrategy='rpc_list';
-      emit('gift_friends_loaded',{count:localFriendIds.length,strategy:friendStrategy,farmingMayContinue:true});
+      emit('gift_friends_loaded',{rpcResult,rawCount,count:localFriendIds.length,
+        responseClass:result.class.fullName,strategy:friendStrategy,farmingMayContinue:true});
       nextGiftAction=0;
     } else if(p.kind==='gift') {
       const status=number(result.field('Result').value);
@@ -1710,6 +1714,7 @@ function tryAutoSendGift(now:number):boolean {
         return false;
       }
       const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
+      reqObj.field('listOption_').value=1; // SocialSettings.Types.ListOption.ReturnAll=1; default 0=UnsetOption returns empty list
       const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
       emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
       reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
