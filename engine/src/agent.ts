@@ -138,6 +138,7 @@ const giftSentFriends=new Set<string>();
 const SEND_GIFT_RPC=950;
 const GET_FRIENDS_LIST_RPC=10006;
 let localFriendIds:string[]=[];
+let friendStrategy='none';
 let rangeObserver:any=null;
 let lastRangeObservation:any=null,captureRangeState=capturePlanning.range(null,0);
 let capturePriorityActions=0,transferDeadlineHits=0;
@@ -1030,7 +1031,8 @@ function poll() {
           }
         }
       }
-      emit('gift_friends_loaded',{count:localFriendIds.length,farmingMayContinue:true});
+      friendStrategy='rpc_list';
+      emit('gift_friends_loaded',{count:localFriendIds.length,strategy:friendStrategy,farmingMayContinue:true});
       nextGiftAction=0;
     } else if(p.kind==='gift') {
       const status=number(result.field('Result').value);
@@ -1637,6 +1639,38 @@ function observePresence(now:number) {
       candidateListTruncated:candidates.length>nearest.length,extraEncounterRequestsSent:0,extraCaptureRequestsSent:0});
   }
 }
+function probeFriendIds():{ids:string[];strategy:string;counts:Record<string,number>} {
+  const counts:Record<string,number>={cached_details:0,raw_protos_dict:0};
+  // S1: CachedFriendDetails (Dictionary<string,ParsedFriendDetails>)
+  try {
+    const svc=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game');
+    const dict=svc.method<Obj>('get_CachedFriendDetails',0).invoke();
+    if(dict instanceof Il2Cpp.Object&&!dict.isNull()){
+      const keys=dict.method<Obj>('get_Keys',0).invoke();
+      if(keys instanceof Il2Cpp.Object&&!keys.isNull()){
+        const ids:string[]=[];
+        for(const k of enumerate(keys,200)){const id=new Il2Cpp.String(k.handle).content;if(id)ids.push(id);}
+        counts.cached_details=ids.length;
+        if(ids.length>0)return{ids,strategy:'cached_details',counts};
+      }
+    }
+  }catch{}
+  // S2: raw FriendProto dict field dkjp (Dictionary<string,FriendProto> at 0x180 on FriendsRpcService)
+  try {
+    const svc=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game');
+    const dict=svc.field<Obj>('dkjp').value;
+    if(dict instanceof Il2Cpp.Object&&!dict.isNull()){
+      const keys=dict.method<Obj>('get_Keys',0).invoke();
+      if(keys instanceof Il2Cpp.Object&&!keys.isNull()){
+        const ids:string[]=[];
+        for(const k of enumerate(keys,200)){const id=new Il2Cpp.String(k.handle).content;if(id)ids.push(id);}
+        counts.raw_protos_dict=ids.length;
+        if(ids.length>0)return{ids,strategy:'raw_protos_dict',counts};
+      }
+    }
+  }catch{}
+  return{ids:[],strategy:'none',counts};
+}
 function tryAutoSendGift(now:number):boolean {
   if(!config.autoSendGift||!giftProfileReady||now<nextGiftAction)return false;
   enterStage('gift:sendable_gifts');
@@ -1654,32 +1688,40 @@ function tryAutoSendGift(now:number):boolean {
     emit('gift_unavailable',{reason:'inventory_empty',retryAfterMs:300000});
     return false;
   }
-  // Fetch friend list via direct RPC if local cache is empty
+  // Fetch friend list — try sync strategies first, fall back to async RPC
   enterStage('gift:friend_ids');
   if(localFriendIds.length===0){
-    enterStage('gift:fetch_friends_rpc');
-    const PLAT='Niantic.Platform.Internal.Protos';
-    const reqCls=klass(PLAT,PLAT+'.GetFriendsListProto');
-    const resCls=klass(PLAT,PLAT+'.GetFriendsListOutProto');
-    const handler=findService('Niantic.Holoholo.Rpc.IRpcHandler');
-    const rpcMethod=handler.method<Obj>('SendRpc',5).inflate(reqCls,resCls);
-    if(rpcMethod.virtualAddress.isNull()){
-      nextGiftAction=now+60000;
-      emit('gift_friends_fetch_failed',{reason:'rpc_unavailable',retryAfterMs:60000,farmingMayContinue:true});
-      return false;
+    enterStage('gift:probe_friends');
+    const probe=probeFriendIds();
+    emit('gift_friend_probe',{strategy:probe.strategy,counts:probe.counts,foundIds:probe.ids.length});
+    if(probe.ids.length>0){
+      localFriendIds=probe.ids;friendStrategy=probe.strategy;
+    } else {
+      // No sync path worked — fire the direct GetFriendsList RPC (SocialAction 10006)
+      enterStage('gift:fetch_friends_rpc');
+      const PLAT='Niantic.Platform.Internal.Protos';
+      const reqCls=klass(PLAT,PLAT+'.GetFriendsListProto');
+      const resCls=klass(PLAT,PLAT+'.GetFriendsListOutProto');
+      const handler=findService('Niantic.Holoholo.Rpc.IRpcHandler');
+      const rpcMethod=handler.method<Obj>('SendRpc',5).inflate(reqCls,resCls);
+      if(rpcMethod.virtualAddress.isNull()){
+        nextGiftAction=now+60000;
+        emit('gift_friends_fetch_failed',{reason:'rpc_unavailable',retryAfterMs:60000,farmingMayContinue:true});
+        return false;
+      }
+      const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
+      const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
+      emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
+      reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
+      return true;
     }
-    const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
-    const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
-    emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
-    reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
-    return true;
   }
   const playerIds=localFriendIds;
   // Find next friend not yet gifted this session
   const recipientId=playerIds.find(id=>!giftSentFriends.has(id));
   if(!recipientId){
     nextGiftAction=now+300000;
-    emit('gifts_complete',{sent:giftSentFriends.size,total:playerIds.length,retryAfterMs:300000});
+    emit('gifts_complete',{sent:giftSentFriends.size,total:playerIds.length,strategy:friendStrategy,retryAfterMs:300000});
     return false;
   }
   // Build proto: GiftboxId (ulong) + PlayerId (string)
@@ -1690,7 +1732,7 @@ function tryAutoSendGift(now:number):boolean {
   field(req,'PlayerId',Il2Cpp.string(recipientId));
   giftSentFriends.add(recipientId);
   emit('gift_sending',{recipientId,giftboxId:giftboxId.toString(),rpcId:SEND_GIFT_RPC,
-    giftsInInventory:gifts.length,totalSent:giftSentFriends.size});
+    giftsInInventory:gifts.length,totalSent:giftSentFriends.size,strategy:friendStrategy});
   reserve('gift',sendRpc(SEND_GIFT_RPC,req,'SendGiftOutProto'),recipientId,[req,giftBox]);
   return true;
 }
