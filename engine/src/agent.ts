@@ -67,7 +67,7 @@ type Config = {autoCatch:boolean; onlyCatch:number[]; autoSpin:boolean; spinGyms
   fieldResearch:boolean;discardUnsupportedResearch:boolean;showIvNames:boolean;extendedManualTransfer:boolean;removeBuddy:boolean;
   autoSendGift:boolean;pinPostcard:boolean;addStickers:boolean;hideTrainerName:boolean;trainerLabel:string;};
 type CaptureRequest = {sessionId:string;requestId:string;encounterId:string;sentAt:number;source:'WILD'|'FIELD_RESEARCH'};
-type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'gift'; promise:HeldReference64;
+type Pending = {kind:'encounter'|'berry'|'capture'|'spin'|'discard'|'transfer'|'quest_claim'|'quest_remove'|'quest_encounter'|'buddy_check'|'buddy_remove'|'gift'|'friends_fetch'; promise:HeldReference64;
   handles:HeldReference64[]; started:number; id:string; item?:number; count?:number; before?:number;keep?:number;
   captureRequest?:CaptureRequest;freshPromise?:boolean;sequence?:number;researchReward?:HeldReference64;distanceMeters?:number;captureLimitMeters?:number};
 let config:Config, initialized=false, stopped=false, ready=false, lastBeat=0, allowed=false;
@@ -136,6 +136,8 @@ let buddyFlow:any=null;
 let giftProfileReady=false, nextGiftAction=0;
 const giftSentFriends=new Set<string>();
 const SEND_GIFT_RPC=950;
+const GET_FRIENDS_LIST_RPC=10006;
+let localFriendIds:string[]=[];
 let rangeObserver:any=null;
 let lastRangeObservation:any=null,captureRangeState=capturePlanning.range(null,0);
 let capturePriorityActions=0,transferDeadlineHits=0;
@@ -825,6 +827,11 @@ function poll() {
       emit('research_paused',{kind:p.kind,id:p.id,reason,retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
     }
+    if(p.kind==='friends_fetch') {
+      emit('gift_friends_fetch_failed',{reason,retryAllowed:true,farmingMayContinue:true});
+      pending=null;p.handles.forEach(h=>h.free());
+      nextGiftAction=Date.now()+30000;return;
+    }
     if(p.kind==='gift') {
       giftSentFriends.delete(p.id);
       emit('gift_rejected',{friendId:p.id,reason,retryAllowed:true,farmingMayContinue:true});
@@ -873,6 +880,11 @@ function poll() {
       researchQueue.uncertain(p.kind,p.id,Date.now());
       emit('research_paused',{kind:p.kind,id:p.id,reason:'response_timeout',retryAllowed:false,scope:'TASK',researchMayContinue:true,farmingMayContinue:true});
       pending=null;p.handles.forEach(h=>h.free());return;
+    }
+    if(p.kind==='friends_fetch'&&Date.now()-p.started>18000) {
+      emit('gift_friends_fetch_failed',{reason:'response_timeout',retryAllowed:true,farmingMayContinue:true});
+      pending=null;p.handles.forEach(h=>h.free());
+      nextGiftAction=Date.now()+30000;return;
     }
     if(p.kind==='gift'&&Date.now()-p.started>18000) {
       giftSentFriends.delete(p.id);
@@ -1004,6 +1016,22 @@ function poll() {
         berryCycle=berryProfileReady?new berryPolicy.BerryCycle(number(result.field('ActiveItem').value)):null;
         emit('encounter',{id:research.encounterId(reward),source:'FIELD_RESEARCH',questId:p.id,...researchStats});
       }
+    } else if(p.kind==='friends_fetch') {
+      // Extract player IDs from GetFriendsListOutProto.friend_ (RepeatedField<FriendProto> at 0x20)
+      const friendRepeat=result.field<Obj>('friend_').value;
+      if(friendRepeat instanceof Il2Cpp.Object&&!friendRepeat.isNull()){
+        const friends=enumerate(friendRepeat,500);
+        localFriendIds=[];
+        for(const f of friends){
+          const psv=f.field<Obj>('playerId_').value;
+          if(psv instanceof Il2Cpp.Object&&!psv.isNull()){
+            const id=new Il2Cpp.String(psv.handle).content;
+            if(id)localFriendIds.push(id);
+          }
+        }
+      }
+      emit('gift_friends_loaded',{count:localFriendIds.length,farmingMayContinue:true});
+      nextGiftAction=0;
     } else if(p.kind==='gift') {
       const status=number(result.field('Result').value);
       const confirmed=status===1;
@@ -1461,13 +1489,18 @@ function giftPreflight() {
     emit('gift_profile',{available:false,reason:'gifting_service_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
     return;
   }
-  // Validate IFriendsRpcService — in holo-game.dll
+  // Validate GetFriendsList RPC — protos live in Niantic.Platform.Internal.Protos.dll
   try {
-    const m=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game')
-      .method<Obj>('get_CachedFriendDetails',0);
-    if(m.isStatic||m.virtualAddress.isNull())throw Error('get_CachedFriendDetails unavailable');
+    const PLAT='Niantic.Platform.Internal.Protos';
+    const reqCls=klass(PLAT,PLAT+'.GetFriendsListProto');
+    const resCls=klass(PLAT,PLAT+'.GetFriendsListOutProto');
+    const friendF=resCls.field('friend_');
+    if(friendF.isStatic||friendF.offset<Il2Cpp.Object.headerSize)throw Error('Incompatible friend_ field');
+    const rpc=findService('Niantic.Holoholo.Rpc.IRpcHandler').method('SendRpc',5).inflate(reqCls,resCls);
+    if(rpc.virtualAddress.isNull())throw Error('GetFriendsList RPC not resolved');
+    checkPromiseLayout(resCls,true);
   }catch(error){
-    emit('gift_profile',{available:false,reason:'friends_service_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
+    emit('gift_profile',{available:false,reason:'friends_rpc_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
     return;
   }
   giftProfileReady=true;
@@ -1621,29 +1654,27 @@ function tryAutoSendGift(now:number):boolean {
     emit('gift_unavailable',{reason:'inventory_empty',retryAfterMs:300000});
     return false;
   }
-  // Get friend player IDs from cached dictionary (keys ARE player ID strings)
+  // Fetch friend list via direct RPC if local cache is empty
   enterStage('gift:friend_ids');
-  const friendsSvc=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game');
-  const dict=object(friendsSvc.method<Obj>('get_CachedFriendDetails',0).invoke(),'CachedFriendDetails');
-  const keys=object(dict.method<Obj>('get_Keys',0).invoke(),'FriendKeys');
-  const playerIds:string[]=[];
-  for(const key of enumerate(keys,200)) {
-    const id=new Il2Cpp.String(key.handle).content;
-    if(id)playerIds.push(id);
+  if(localFriendIds.length===0){
+    enterStage('gift:fetch_friends_rpc');
+    const PLAT='Niantic.Platform.Internal.Protos';
+    const reqCls=klass(PLAT,PLAT+'.GetFriendsListProto');
+    const resCls=klass(PLAT,PLAT+'.GetFriendsListOutProto');
+    const handler=findService('Niantic.Holoholo.Rpc.IRpcHandler');
+    const rpcMethod=handler.method<Obj>('SendRpc',5).inflate(reqCls,resCls);
+    if(rpcMethod.virtualAddress.isNull()){
+      nextGiftAction=now+60000;
+      emit('gift_friends_fetch_failed',{reason:'rpc_unavailable',retryAfterMs:60000,farmingMayContinue:true});
+      return false;
+    }
+    const reqObj=reqCls.alloc();reqObj.method('.ctor',0).invoke();
+    const rpcPromise=object(rpcMethod.invoke(GET_FRIENDS_LIST_RPC,reqObj,1000,10000,false),'SendRpc(GetFriendsListOutProto)');
+    emit('gift_friends_fetching',{rpcId:GET_FRIENDS_LIST_RPC});
+    reserve('friends_fetch',rpcPromise,'friends_fetch',[reqObj]);
+    return true;
   }
-  if(playerIds.length===0){
-    // Cache empty — fire a fetch for its side effect (populates cache in background),
-    // then retry in 15s. Do NOT reserve the promise: it's a chained IPromise<IEnumerable<T>>
-    // whose concrete class won't have completeCalled/errorCalled/completedValue.
-    enterStage('gift:fetch_friends');
-    try {
-      const fetchM=friendsSvc.method<Obj>('GetFriendsListWithCacheRefresh',0);
-      if(!fetchM.isStatic&&!fetchM.virtualAddress.isNull())fetchM.invoke();
-    }catch{/* best-effort */}
-    nextGiftAction=now+15000;
-    emit('gift_friends_fetching',{reason:'cache_empty',retryAfterMs:15000});
-    return false;
-  }
+  const playerIds=localFriendIds;
   // Find next friend not yet gifted this session
   const recipientId=playerIds.find(id=>!giftSentFriends.has(id));
   if(!recipientId){
