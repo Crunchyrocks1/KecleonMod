@@ -1030,7 +1030,7 @@ function poll() {
         rawCount=friends.length;
         localFriendIds=[];
         for(const f of friends){
-          const psv=f.field<Obj>('playerId_').value;
+          const psv=f.field<Obj>('niaAccountId_').value; // playerId_ is [Obsolete] and empty; niaAccountId_ is the current identifier
           if(psv instanceof Il2Cpp.Object&&!psv.isNull()){
             const id=new Il2Cpp.String(psv.handle).content;
             if(id)localFriendIds.push(id);
