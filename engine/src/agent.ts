@@ -1452,18 +1452,18 @@ function giftPreflight() {
       rpcId:SEND_GIFT_RPC,requestFields:reqFields,responseFields:resFields});
     return;
   }
-  // Validate IGiftingService (sendable gift boxes)
+  // Validate IGiftingService — in holo-game-interfaces.dll
   try {
-    const m=findService('Niantic.Holoholo.Social.Gifting.IGiftingService')
+    const m=findService('Niantic.Holoholo.Social.Gifting.IGiftingService','holo-game-interfaces')
       .method<Obj>('get_SendableGiftsInInventory',0);
     if(m.isStatic||m.virtualAddress.isNull())throw Error('get_SendableGiftsInInventory unavailable');
   }catch(error){
     emit('gift_profile',{available:false,reason:'gifting_service_unavailable',error:String(error),rpcId:SEND_GIFT_RPC});
     return;
   }
-  // Validate IFriendsRpcService (cached friend dictionary)
+  // Validate IFriendsRpcService — in holo-game.dll
   try {
-    const m=findService('Niantic.Holoholo.Social.IFriendsRpcService')
+    const m=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game')
       .method<Obj>('get_CachedFriendDetails',0);
     if(m.isStatic||m.virtualAddress.isNull())throw Error('get_CachedFriendDetails unavailable');
   }catch(error){
@@ -1608,7 +1608,7 @@ function tryAutoSendGift(now:number):boolean {
   if(!config.autoSendGift||!giftProfileReady||now<nextGiftAction)return false;
   enterStage('gift:sendable_gifts');
   // Get sendable gift boxes from inventory
-  const giftingSvc=findService('Niantic.Holoholo.Social.Gifting.IGiftingService');
+  const giftingSvc=findService('Niantic.Holoholo.Social.Gifting.IGiftingService','holo-game-interfaces');
   const giftsEnum=giftingSvc.method<Obj>('get_SendableGiftsInInventory',0).invoke();
   if(!(giftsEnum instanceof Il2Cpp.Object)||giftsEnum.isNull()){
     nextGiftAction=now+60000;
@@ -1623,7 +1623,7 @@ function tryAutoSendGift(now:number):boolean {
   }
   // Get friend player IDs from cached dictionary (keys ARE player ID strings)
   enterStage('gift:friend_ids');
-  const friendsSvc=findService('Niantic.Holoholo.Social.IFriendsRpcService');
+  const friendsSvc=findService('Niantic.Holoholo.Social.IFriendsRpcService','holo-game');
   const dict=object(friendsSvc.method<Obj>('get_CachedFriendDetails',0).invoke(),'CachedFriendDetails');
   const keys=object(dict.method<Obj>('get_Keys',0).invoke(),'FriendKeys');
   const playerIds:string[]=[];
